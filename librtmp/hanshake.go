@@ -1,6 +1,10 @@
 package librtmp
 
-import "avformat/utils"
+import (
+	"encoding/binary"
+	"math/rand"
+	"time"
+)
 
 const (
 	VERSION             = 3
@@ -53,17 +57,42 @@ C1 and S1 bits
  C2 and S2 bits
 */
 
-//C0+C1一起发，收到S1发C2。
+// GenerateC0C1 C0+C1一起发，收到S1发C2。
+func GenerateC0C1(dst []byte) int {
+	size := 1 + HandshakePacketSize
 
-func writeHandshakeC0(dst []byte) {
 	dst[0] = VERSION
+	//ffmpeg后面写flash client version 有的写C1。
+	//gen random bytes
+	for i := 9; i < size; i++ {
+		dst[i] = byte(rand.Intn(255))
+	}
+
+	return size
 }
 
-func writeHandshakeC1(dst []byte, time int) {
-	utils.WriteDWORD(dst, uint32(time))
-	utils.WriteDWORD(dst, 0)
+// GenerateS0S1S2 Server将S0S1S2一起发送
+func GenerateS0S1S2(dst []byte, c1 []byte) int {
+	size := 1 + HandshakePacketSize*2
+	//S0
+	dst[0] = VERSION
+	//S1
+	time1 := uint32(time.Now().Second())
+	binary.BigEndian.PutUint32(dst[1:], time1)
+	binary.BigEndian.PutUint32(dst[5:], 0)
+	randEcho(dst[9:], time1)
+	//S2
+	time2 := uint32(time.Now().Second())
+	copy(dst[1+HandshakePacketSize:], c1)
+	binary.BigEndian.PutUint32(dst[1+HandshakePacketSize:], time2)
+
+	return size
 }
 
-func writeHandshakeRandom(dst []byte) {
-
+func randEcho(dst []byte, time uint32) {
+	rand.Seed(int64(time))
+	end := HandshakePacketSize - 8
+	for i := 0; i < end; i++ {
+		dst[i] = byte(rand.Intn(255))
+	}
 }

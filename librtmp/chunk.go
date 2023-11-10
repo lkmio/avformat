@@ -1,13 +1,14 @@
 package librtmp
 
 import (
-	"avformat/utils"
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat"
+	"github.com/yangjiechina/avformat/utils"
 )
 
-//https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol
-//https://rtmp.veriskope.com/pdf/rtmp_specification_1.0.pdf
+// https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol
+// https://rtmp.veriskope.com/pdf/rtmp_specification_1.0.pdf
 type ChunkType byte
 type ChunkStreamID int
 type MessageTypeID int
@@ -16,14 +17,14 @@ type UserControlMessageEvent uint16
 type TransactionID int
 
 /*
-ChunkHeader Format
+Chunk Format
 Each chunk consists of a header and data. The header itself has
 three parts:
 +--------------+----------------+--------------------+--------------+
-| Basic Header | Message Header | Extended Timestamp | ChunkHeader Data |
+| Basic Header | Chunk Header | Extended Timestamp | Chunk Data |
 +--------------+----------------+--------------------+--------------+
 | |
-|<------------------- ChunkHeader Header ----------------->|
+|<------------------- Chunk Header ----------------->|
 */
 
 /**
@@ -41,9 +42,9 @@ type 0
 
 const (
 	ChunkType0 = ChunkType(0x00)
-	ChunkType1 = ChunkType(0x01)
-	ChunkType2 = ChunkType(0x02)
-	ChunkType3 = ChunkType(0x03)
+	ChunkType1 = ChunkType(0x01) //The message stream ID is not included
+	ChunkType2 = ChunkType(0x02) //Neither the stream ID nor the message length is included;
+	ChunkType3 = ChunkType(0x03) //basic header
 
 	ChunkStreamIdNetwork = ChunkStreamID(2)
 	ChunkStreamIdSystem  = ChunkStreamID(3)
@@ -78,39 +79,66 @@ const (
 	TransactionIDCreateStream = TransactionID(2)
 	TransactionIDPlay         = TransactionID(0)
 	DefaultChunkSize          = 128
+	ChunkSize                 = 60000
+	WindowSize                = 2500000
+
+	MessageResult        = "_result"
+	MessageError         = "_error"
+	MessageConnect       = "connect"
+	MessageCall          = "call"
+	MessageClose         = "close"
+	MessageFcPublish     = "FCPublish"
+	MessageReleaseStream = "releaseStream"
+	MessageCreateStream  = "createStream"
+	MessageStreamLength  = "getStreamLength"
+	MessagePublish       = "publish"
+	MessagePlay          = "play"
+	MessagePlay2         = "play2"
+	MessageDeleteStream  = "deleteStream"
+	MessageReceiveAudio  = "receiveAudio"
+	MessageReceiveVideo  = "receiveVideo"
+	MessageSeek          = "seek"
+	MessagePause         = "pause"
+	MessageOnStatus      = "onStatus"
+	MessageOnMetaData    = "onMetaData"
 )
 
-type ChunkHeader struct {
+type Chunk struct {
 	//basic header
-	chunkType     ChunkType     //1-3bytes.低6位等于0,2字节;低6位等于1,3字节
-	chunkStreamId ChunkStreamID //customized by users
+	type_ ChunkType     //fmt 1-3bytes.低6位等于0,2字节;低6位等于1,3字节
+	csid  ChunkStreamID //chunk stream id. customized by users
 
-	timestamp       int
-	MessageLength   int
-	messageTypeId   MessageTypeID
-	messageStreamId int //customized by users. LittleEndian
+	timestamp uint32
+	//表明的chunk长度
+	Length int           //message length
+	tid    MessageTypeID //message type id
+	sid    int           //message stream id. customized by users. LittleEndian
 
+	//body
+	data []byte
+	//实际接受到的chunk大小
+	size int
 }
 
-func (h ChunkHeader) ToBytes(dst []byte) int {
+func (h *Chunk) ToBytes(dst []byte) int {
 	var index int
 	index++
 
-	dst[0] = byte(h.chunkType) << 6
-	if h.chunkStreamId <= 63 {
+	dst[0] = byte(h.type_) << 6
+	if h.csid <= 63 {
 		dst[0] = dst[0] | 0x3
-	} else if h.chunkStreamId <= 0xFF {
+	} else if h.csid <= 0xFF {
 		dst[0] = dst[0] & 0xC0
-		dst[1] = byte(h.chunkStreamId)
+		dst[1] = byte(h.csid)
 		index++
-	} else if h.chunkStreamId <= 0xFFFF {
+	} else if h.csid <= 0xFFFF {
 		dst[0] = dst[0] & 0xC0
 		dst[0] = dst[0] | 0x1
-		binary.BigEndian.PutUint16(dst[1:], uint16(h.chunkStreamId))
+		binary.BigEndian.PutUint16(dst[1:], uint16(h.csid))
 		index += 2
 	}
 
-	if h.chunkType < ChunkType3 {
+	if h.type_ < ChunkType3 {
 		if h.timestamp >= 0xFFFFFF {
 			utils.WriteUInt24(dst[index:], 0xFFFFFF)
 		} else {
@@ -119,14 +147,14 @@ func (h ChunkHeader) ToBytes(dst []byte) int {
 		index += 3
 	}
 
-	if h.chunkType < ChunkType2 {
-		utils.WriteUInt24(dst[index:], uint32(h.MessageLength))
+	if h.type_ < ChunkType2 {
+		utils.WriteUInt24(dst[index:], uint32(h.Length))
 		index += 4
-		dst[index-1] = byte(h.messageTypeId)
+		dst[index-1] = byte(h.tid)
 	}
 
-	if h.chunkType < ChunkType1 {
-		binary.LittleEndian.PutUint32(dst[index:], uint32(h.messageStreamId))
+	if h.type_ < ChunkType1 {
+		binary.LittleEndian.PutUint32(dst[index:], uint32(h.sid))
 		index += 4
 	}
 
@@ -136,6 +164,27 @@ func (h ChunkHeader) ToBytes(dst []byte) int {
 	}
 
 	return index
+}
+
+func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
+	avformat.Assert(len(h.data) >= h.Length)
+	n := h.ToBytes(data)
+	var length = h.Length
+
+	for length > 0 {
+		if length != h.Length {
+			data[n] = byte((0x3 << 6) | h.csid)
+			n++
+		}
+
+		consume := utils.MinInt(length, chunkSize)
+		offset := h.Length - length
+		copy(data[n:], h.data[offset:offset+consume])
+		length -= consume
+		n += consume
+	}
+
+	return n
 }
 
 func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
@@ -158,36 +207,45 @@ func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
 	}
 }
 
-func readChunkHeader(src []byte) (ChunkHeader, int, error) {
+func (c *Chunk) Reset() {
+	//c.csid = 0
+	c.timestamp = 0
+	//c.Length	 = 0
+	c.tid = 0
+	c.sid = 0
+	c.size = 0
+}
+
+func readChunkHeader(src []byte) (Chunk, int, error) {
 	t, csid, i, err := readBasicHeader(src)
 	if err != nil {
-		return ChunkHeader{}, 0, err
+		return Chunk{}, 0, err
 	}
 
-	header := ChunkHeader{
-		chunkType:     t,
-		chunkStreamId: csid,
+	header := Chunk{
+		type_: t,
+		csid:  csid,
 	}
 
-	if header.chunkType < ChunkType3 {
-		header.timestamp = utils.BytesToInt(src[i : i+3])
+	if header.type_ < ChunkType3 {
+		header.timestamp = uint32(utils.BytesToInt(src[i : i+3]))
 		i += 3
 	}
 
-	if header.chunkType < ChunkType2 {
+	if header.type_ < ChunkType2 {
 		i += 3
-		header.MessageLength = utils.BytesToInt(src[i-3 : i])
-		header.messageTypeId = MessageTypeID(src[i])
+		header.Length = utils.BytesToInt(src[i-3 : i])
+		header.tid = MessageTypeID(src[i])
 		i++
 	}
 
-	if header.chunkType < ChunkType1 {
-		header.messageStreamId = int(binary.LittleEndian.Uint32(src[i:]))
+	if header.type_ < ChunkType1 {
+		header.sid = int(binary.LittleEndian.Uint32(src[i:]))
 		i += 4
 	}
 
 	if header.timestamp == 0xFFFFFF {
-		header.timestamp = int(binary.BigEndian.Uint32(src[i:]))
+		header.timestamp = binary.BigEndian.Uint32(src[i:])
 		i += 4
 	}
 
