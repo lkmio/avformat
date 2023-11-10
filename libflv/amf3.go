@@ -1,7 +1,7 @@
 package libflv
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 	"math"
 	"time"
 )

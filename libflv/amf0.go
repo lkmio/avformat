@@ -4,7 +4,7 @@ package libflv
 //@https://rtmp.veriskope.com/pdf/amf0-file-format-specification.pdf
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 	"math"
 )
 
