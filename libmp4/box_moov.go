@@ -1,10 +1,11 @@
 package libmp4
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 )
 
-/**
+/*
+*
 8.2.2.2
 Box	Type: ‘mvhd’
 Container: Movie Box (‘moov’)
@@ -46,10 +47,13 @@ type trackBox struct {
 	containerBox
 }
 
-/**
+/*
+*
 Box	Type:	 ‘udta’
 Container:	 Movie	Box	(‘moov’),	Track	Box	(‘trak’),
-	 Movie	Fragment	Box	(‘moof’)	or	Track	Fragment	Box	(‘traf’)
+
+	Movie	Fragment	Box	(‘moof’)	or	Track	Fragment	Box	(‘traf’)
+
 Mandatory:	No
 Quantity:	 Zero	or	one
 */

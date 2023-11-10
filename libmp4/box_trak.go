@@ -1,8 +1,9 @@
 package libmp4
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
-/**
+/*
+*
 Box	Type: ‘tkhd’
 Container: Track Box (‘trak’)
 Mandatory: Yes
@@ -27,7 +28,8 @@ type trackHeaderBox struct {
 	height int32
 }
 
-/**
+/*
+*
 Box Type: `tref’
 Container: Track Box (‘trak’)
 Mandatory: No
@@ -37,20 +39,21 @@ type trackReferenceBox struct {
 	containerBox
 }
 
-//‘hint’
-//‘cdsc‘
-//‘font‘
-//‘hind‘
-//‘vdep’
-//‘vplx’
-//‘subt’
+// ‘hint’
+// ‘cdsc‘
+// ‘font‘
+// ‘hind‘
+// ‘vdep’
+// ‘vplx’
+// ‘subt’
 type trackReferenceTypeBox struct {
 	finalBox
 	referenceType uint32
 	trackIds      []uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘trgr’
 Container:	 Track	Box	(‘trak’)
 Mandatory:	 No
@@ -60,7 +63,7 @@ type trackGroupBox struct {
 	containerBox
 }
 
-//msrc
+// msrc
 type trackGroupTypeBox struct {
 	finalBox
 	trackGroupType uint32
@@ -68,7 +71,8 @@ type trackGroupTypeBox struct {
 	trackGroupId uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘edts’
 Container:	 Track	Box	(‘trak’)
 Mandatory:	No
@@ -78,7 +82,8 @@ type editBox struct {
 	containerBox
 }
 
-/**
+/*
+*
 Box	Type:	 ‘elst’
 Container:	 Edit	Box	(‘edts’)
 Mandatory:	No
@@ -94,7 +99,8 @@ type editListBox struct {
 	mediaRateFraction []int16
 }
 
-/**
+/*
+*
 Box	Type:	 ‘mdia’
 Container:	 Track	Box	(‘trak’)
 Mandatory:	Yes

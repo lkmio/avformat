@@ -1,10 +1,10 @@
 package libmp4
 
 import (
-	"avformat/libavc"
-	"avformat/libhevc"
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/libhevc"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 //stsd * 8.5.2 sample descriptions (codec types, initialization
@@ -28,7 +28,8 @@ import (
 //saiz 8.7.8 sample auxiliary information sizes
 //saio 8.7.9 sample auxiliary information offsets
 
-/**
+/*
+*
 Box	Types:	 ‘stsd’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	Yes
@@ -40,7 +41,8 @@ type sampleDescriptionBox struct {
 	entryCount uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stdp’
 Container:	 Sample	Table	Box	(‘stbl’).
 Mandatory:	No.
@@ -55,7 +57,8 @@ type degradationPriorityBox struct {
 	//unsigned int(16) priority;
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stts’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	Yes
@@ -69,7 +72,8 @@ type decodingTimeToSampleBox struct {
 	sampleDelta []uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘ctts’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	No
@@ -83,7 +87,8 @@ type compositionTimeToSampleBox struct {
 	sampleOffset []uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘cslg’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Extension	Properties	Box	(‘trep’)
 Mandatory:	No
@@ -99,7 +104,8 @@ type compositionToDecodeBox struct {
 	compositionEndTime           int64
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stss’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	No
@@ -113,7 +119,8 @@ type syncSampleBox struct {
 	sampleNumber map[uint32]byte
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stsh’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	No
@@ -125,7 +132,8 @@ type shadowSyncSampleBox struct {
 	entryCount uint32
 }
 
-/**
+/*
+*
 Box	Types:	 ‘sdtp’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	No
@@ -137,7 +145,8 @@ type independentAndDisposableSamplesBox struct {
 	//sample_count from 'stsz' or ‘stz2’
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stsz’,	‘stz2’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	Yes
@@ -163,7 +172,8 @@ type compactSampleSizeBox struct {
 	//}
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stsc’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	Yes
@@ -178,7 +188,8 @@ type sampleToChunkBox struct {
 	sampleDescriptionIndex []uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stco’,	‘co64’
 Container:	 Sample	Table	Box	(‘stbl’)
 Mandatory:	Yes
@@ -191,7 +202,7 @@ type chunkOffsetBox struct {
 	chunkOffset []uint32
 }
 
-//‘co64’
+// ‘co64’
 type chunkLargeOffsetBox struct {
 	fullBox
 	finalBox
@@ -199,7 +210,8 @@ type chunkLargeOffsetBox struct {
 	chunkOffset []uint64
 }
 
-/**
+/*
+*
 Box	Type:	 ‘padb’
 Container:	 Sample	Table	(‘stbl’)
 Mandatory:	No
@@ -211,7 +223,8 @@ type paddingBitsBox struct {
 	sampleCount uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘subs’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Fragment	Box	(‘traf’)
 Mandatory:	No
@@ -223,7 +236,8 @@ type subSampleInformationBox struct {
 	entryCount uint32
 }
 
-/**
+/*
+*
 Box	Type:	 ‘saiz’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Fragment	Box	('traf')
 Mandatory:	No
@@ -239,7 +253,8 @@ type sampleAuxiliaryInformationSizesBox struct {
 	sampleInfoSize        []uint8
 }
 
-/**
+/*
+*
 Box	Type:	 ‘saio’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Fragment	Box	('traf')
 Mandatory:	No
@@ -254,7 +269,8 @@ type sampleAuxiliaryInformationOffsetsBox struct {
 	offset               []uint8
 }
 
-/**
+/*
+*
 Box	Type:	 ‘sbgp’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Fragment	Box	(‘traf’)
 Mandatory:	No
@@ -274,7 +290,8 @@ type sampleToGroupBox struct {
 type sampleGroupDescriptionEntry interface {
 }
 
-/**
+/*
+*
 Box	Type:	 ‘sgpd’
 Container:	 Sample	Table	Box	(‘stbl’)	or	Track	Fragment	Box	(‘traf’)
 Mandatory:	No

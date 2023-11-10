@@ -1,9 +1,9 @@
 package libhevc
 
 import (
-	"avformat/libavc"
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {

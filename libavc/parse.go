@@ -1,7 +1,7 @@
 package libavc
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 var (

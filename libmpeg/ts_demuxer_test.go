@@ -1,7 +1,7 @@
 package libmpeg
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 	"io/ioutil"
 	"os"
 	"testing"

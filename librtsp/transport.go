@@ -1,8 +1,8 @@
 package librtsp
 
 import (
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 var (

@@ -1,6 +1,6 @@
 package librtp
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
 //PT   encoding    media type  clock rate   channels
 //name                    (Hz)

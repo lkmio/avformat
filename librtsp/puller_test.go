@@ -1,7 +1,7 @@
 package librtsp
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 	"os"
 	"testing"
 )
@@ -17,7 +17,8 @@ func TestPuller(t *testing.T) {
 			h264File.Write(data[12:])
 		}
 	})
-	url := "rtsp://wowzaec2demo.streamlock.net:554/vod/mp4:BigBuckBunny_115k.mov"
+	//url := "rtsp://wowzaec2demo.streamlock.net:554/vod/mp4:BigBuckBunny_115k.mov"
+	url := "rtsp://192.168.2.148/hls/mystream"
 	puller.Open(url)
 	select {}
 }

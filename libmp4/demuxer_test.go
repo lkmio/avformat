@@ -1,9 +1,9 @@
 package libmp4
 
 import (
-	"avformat/libavc"
-	"avformat/libhevc"
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/libhevc"
+	"github.com/yangjiechina/avformat/utils"
 	"os"
 	"testing"
 )

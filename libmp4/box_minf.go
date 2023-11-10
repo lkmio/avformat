@@ -1,8 +1,9 @@
 package libmp4
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
-/**
+/*
+*
 Box	Types:	 ‘vmhd’
 Container:	 Media	Information	Box	(‘minf’)
 Mandatory:	Yes
@@ -15,7 +16,8 @@ type videoMediaHeaderBox struct {
 	opColor      [3]uint16
 }
 
-/**
+/*
+*
 Box	Types:	 	‘smhd’
 Container:	 Media	Information	Box	(‘minf’)
 Mandatory:	Yes
@@ -28,7 +30,8 @@ type soundMediaHeaderBox struct {
 	//const unsigned int(16) reserved = 0;
 }
 
-/**
+/*
+*
 Box	Types:	 ’hmhd’
 Container:	 Media	Information	Box	(‘minf’)
 Mandatory:	Yes
@@ -44,7 +47,8 @@ type hintMediaHeaderBox struct {
 	//reserved uint32
 }
 
-/**
+/*
+*
 ‘sthd’
 */
 type subtitleMediaHeaderBox struct {
@@ -52,7 +56,8 @@ type subtitleMediaHeaderBox struct {
 	finalBox
 }
 
-/**
+/*
+*
 nmhd
 */
 type nullMediaHeaderBox struct {
@@ -60,7 +65,8 @@ type nullMediaHeaderBox struct {
 	finalBox
 }
 
-/**
+/*
+*
 Box	Type:	 ‘dinf’
 Container:	 Media	Information	Box	(‘minf’)	or	Meta	Box	(‘meta’)
 Mandatory:	Yes	(required	within	‘minf’	box)	and	No	(optional	within	‘meta’	box)
@@ -70,7 +76,8 @@ type dataInformationBox struct {
 	containerBox
 }
 
-/**
+/*
+*
 Box	Types:	‘dref’
 Container:	Data	Information	Box	(‘dinf’)
 Mandatory:	Yes
@@ -81,7 +88,8 @@ type dataReferenceBox struct {
 	entryCount uint32
 }
 
-/**
+/*
+*
 Box	Types:	‘url ‘,	‘urn ‘
 Container:	Data	Information	Box	(‘dref’)
 Mandatory:	Yes	(at	least	one	of	‘url	‘	or	‘urn	‘	shall	be	present)

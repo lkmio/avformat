@@ -1,11 +1,11 @@
 package librtsp
 
 import (
-	"avformat/librtsp/sdp"
-	"avformat/utils"
 	"bufio"
 	bytes2 "bytes"
 	"fmt"
+	"github.com/yangjiechina/avformat/librtsp/sdp"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"net/http"
 	"net/textproto"

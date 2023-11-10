@@ -1,7 +1,7 @@
 package librtp
 
 import (
-	"avformat/utils"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 type encodeHandler func(data []byte, timestamp uint32)

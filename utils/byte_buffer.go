@@ -103,7 +103,7 @@ func (b *byteBuffer) ReadTo(handle func([]byte)) {
 	b.readOffset = b.size
 }
 
-//返回readOffset在二维切片的索引
+// 返回readOffset在二维切片的索引
 func (b *byteBuffer) offset() (int, int) {
 	if len(b.itemSize) == 1 {
 		return 0, b.readOffset
