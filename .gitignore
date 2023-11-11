@@ -1,0 +1,15 @@
+*.raw
+*.h264
+*.h265
+*.ps
+*.flv
+*.mp4
+*.rm
+*.aac
+*.pcapng
+.idea/
+go.sum
+*.ts
+*.vob
+*.audio
+*.video
