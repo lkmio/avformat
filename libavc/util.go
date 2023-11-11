@@ -79,12 +79,8 @@ func ExtraDataToAnnexB(src []byte) ([]byte, error) {
 		dstBuffer.Write(src[readOffset : readOffset+size])
 		buffer.Skip(size)
 
-		bytes := buffer.ReadableBytes()
 		spsDone++
-		if bytes > 2 && unitNb == 0 && spsDone == 1 {
-			if err := buffer.PeekCount(1); err != nil {
-				return nil, err
-			}
+		if buffer.ReadableBytes() > 2 && unitNb == 0 && spsDone == 1 {
 			unitNb = buffer.ReadUInt8()
 		}
 	}
