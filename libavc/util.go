@@ -1,8 +1,8 @@
 package libavc
 
 import (
-	"avformat/utils"
 	"encoding/binary"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 type MPEG4AVCConfig struct {

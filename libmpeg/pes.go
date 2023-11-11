@@ -1,6 +1,6 @@
 package libmpeg
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
 const (
 	StreamIdPrivateStream1 = 0xBD

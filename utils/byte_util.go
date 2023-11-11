@@ -40,6 +40,10 @@ func BytesToUInt24(b1, b2, b3 byte) uint32 {
 	return (uint32(b1) << 16) | (uint32(b2) << 8) | uint32(b3)
 }
 
+func BytesToUInt24WhitSlice(data []byte) uint32 {
+	return (uint32(data[0]) << 16) | (uint32(data[1]) << 8) | uint32(data[2])
+}
+
 func BytesToUInt32(b1, b2, b3, b4 byte) uint32 {
 	return (uint32(b1) << 24) | (uint32(b2) << 16) | (uint32(b3) << 8) | uint32(b4)
 }

@@ -1,6 +1,6 @@
 package librtp
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
 const (
 	VERSION           = 2

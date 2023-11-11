@@ -1,6 +1,6 @@
 package libmp4
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
 const (
 	mp4ODescTag           = 0x01

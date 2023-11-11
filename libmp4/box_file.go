@@ -1,8 +1,9 @@
 package libmp4
 
-import "avformat/utils"
+import "github.com/yangjiechina/avformat/utils"
 
-/**
+/*
+*
 root
 */
 type file struct {
@@ -16,7 +17,8 @@ type fileTypeBox struct {
 	compatibleBrands []uint32
 }
 
-/**
+/*
+*
 Box	Types: ‘pdin’
 Container: File
 Mandatory: No
@@ -31,7 +33,8 @@ type freeBox struct {
 	finalBox
 }
 
-/**
+/*
+*
 Box Type: ‘mdat’
 Container: File
 Mandatory: No
@@ -41,7 +44,8 @@ type mediaDataBox struct {
 	finalBox
 }
 
-/**
+/*
+*
 Box Type: ‘moov’
 Container: File
 Mandatory: Yes

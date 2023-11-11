@@ -1,9 +1,9 @@
 package librtp
 
 import (
-	"avformat/libmpeg"
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/libmpeg"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"testing"
 )

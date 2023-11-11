@@ -1,8 +1,8 @@
 package libmp4
 
 import (
-	"avformat/utils"
 	"encoding/binary"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 type reader struct {
@@ -15,7 +15,7 @@ func newReader(data []byte) *reader {
 	return &reader{data: data, offset: 0}
 }
 
-//func (r reader) hasNext() bool {
+// func (r reader) hasNext() bool {
 func (r *reader) nextSize() int64 {
 	remain := int64(len(r.data)) - r.offset
 	if remain < 4 {

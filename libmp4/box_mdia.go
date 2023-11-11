@@ -1,11 +1,12 @@
 package libmp4
 
 import (
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/utils"
 )
 
-/**
+/*
+*
 Box	Type:	 ‘mdhd’
 Container:	 Media	Box	(‘mdia’)
 Mandatory:	Yes
@@ -23,7 +24,8 @@ type mediaHeaderBox struct {
 	preDefined       uint16
 }
 
-/**
+/*
+*
 Box	Type:	 ‘hdlr’
 Container:	 Media	Box	(‘mdia’)	or	Meta	Box	(‘meta’)
 Mandatory:	Yes
@@ -39,7 +41,8 @@ type handlerReferenceBox struct {
 	name string
 }
 
-/**
+/*
+*
 Box	Type:	 ‘elng’
 Container:	 Media	Box	(‘mdia’)
 Mandatory:	No
@@ -51,7 +54,8 @@ type extendedLanguageBox struct {
 	extendedLanguage string
 }
 
-/**
+/*
+*
 Box	Type:	 ‘minf’
 Container:	 Media	Box	(‘mdia’)
 Mandatory:	Yes
@@ -61,7 +65,8 @@ type mediaInformationBox struct {
 	containerBox
 }
 
-/**
+/*
+*
 Box	Type:	 ‘stbl’
 Container:	 Media	Information	Box	(‘minf’)
 Mandatory:	Yes

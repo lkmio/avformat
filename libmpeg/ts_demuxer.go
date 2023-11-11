@@ -1,8 +1,8 @@
 package libmpeg
 
 import (
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 type TSDeMuxer struct {
@@ -10,7 +10,7 @@ type TSDeMuxer struct {
 	pid      []int
 	esPacket []byte
 	esLength int
-	packet   *utils.Packet
+	packet   *utils.AVPacket
 
 	lastPesPacket    *PESHeader
 	currentPesPacket *PESHeader

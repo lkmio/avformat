@@ -1,8 +1,8 @@
 package libmp4
 
 import (
-	"avformat/utils"
 	"fmt"
+	"github.com/yangjiechina/avformat/utils"
 	"io"
 	"io/ioutil"
 )

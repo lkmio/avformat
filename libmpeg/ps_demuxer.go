@@ -1,10 +1,10 @@
 package libmpeg
 
 import (
-	"avformat/libavc"
-	"avformat/utils"
 	"bufio"
 	"fmt"
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/utils"
 	"io"
 	"io/ioutil"
 	"os"
@@ -20,11 +20,11 @@ type DeMuxer struct {
 	lastPesHeader    *PESHeader
 	currentPesHeader *PESHeader
 
-	packet     *utils.Packet
+	packet     *utils.AVPacket
 	streamType byte
 }
 
-func callbackES(streamId, streamType byte, packet *utils.Packet, handler deHandler) {
+func callbackES(streamId, streamType byte, packet *utils.AVPacket, handler deHandler) {
 	var keyFrame bool
 	switch streamId {
 	case StreamIdAudio:

@@ -1,3 +1,3 @@
-module avformat
+module github.com/yangjiechina/avformat
 
-go 1.15
+go 1.19

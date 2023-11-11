@@ -1,9 +1,9 @@
 package libmpeg
 
 import (
-	"avformat/utils"
 	"encoding/hex"
 	"fmt"
+	"github.com/yangjiechina/avformat/utils"
 )
 
 const (
