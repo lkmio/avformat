@@ -13,6 +13,9 @@ type Handler struct {
 	first   bool
 	muxer   *Muxer
 	out     *os.File
+
+	audioOut *os.File
+	videoOut *os.File
 }
 
 func (h *Handler) OnDeMuxStream(stream utils.AVStream) {
@@ -58,14 +61,21 @@ func (h *Handler) OnDeMuxPacket(index int, packet *utils.AVPacket2) {
 			n += len(videoStream.Extra())
 		}
 
-		h.out.Write(header_[:])
+		h.out.Write(header_[:n])
 	}
 
-	var tagHeader [64]byte
-	n := h.muxer.Input(tagHeader[:], packet.MediaType(), len(packet.Data()), packet.Dts(), packet.Pts(), packet.KeyFrame(), false)
-	bytes := append(tagHeader[:n], packet.Data()...)
+	if h.muxer != nil {
+		var tagHeader [64]byte
+		n := h.muxer.Input(tagHeader[:], packet.MediaType(), len(packet.Data()), packet.Dts(), packet.Pts(), packet.KeyFrame(), false)
+		bytes := append(tagHeader[:n], packet.Data()...)
+		h.out.Write(bytes)
+	}
 
-	h.out.Write(bytes)
+	if utils.AVMediaTypeAudio == packet.MediaType() {
+		h.audioOut.Write(packet.Data())
+	} else {
+		h.videoOut.Write(packet.Data())
+	}
 }
 
 func (h *Handler) OnDeMuxDone() {
@@ -103,7 +113,7 @@ func TestDeMuxer(t *testing.T) {
 	}()
 
 	muxer := DeMuxer{}
-	handler := &Handler{first: true, out: outfile}
+	handler := &Handler{first: true, out: outfile, audioOut: aacFile, videoOut: h264File}
 	muxer.SetHandler(handler)
 
 	open, err := os.Open(path)

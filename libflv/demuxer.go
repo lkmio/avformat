@@ -36,6 +36,8 @@ const (
 	SoundRate44000HZ = SoundRate(3) //For AAC:always 3
 )
 
+type MP3Header uint32
+
 type DeMuxer struct {
 	avformat.DeMuxerImpl
 
@@ -282,28 +284,17 @@ func (d *DeMuxer) Input(data []byte) (int, error) {
 }
 
 func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
-	n, sequenceHeader, key, id, ct, err := ParseVideoData(data)
+	n, sequenceHeader, key, codecId, ct, err := ParseVideoData(data)
 	if err != nil {
 		return err
 	}
 
 	if sequenceHeader {
 		var stream utils.AVStream
-		var codecId utils.AVCodecID
-		if id == VideoCodeIdH264 {
-			codecId = utils.AVCodecIdH264
-
-		}
-
 		stream = utils.NewAVStream(utils.AVMediaTypeVideo, 0, codecId, data[n:], utils.ExtraTypeM4VC)
 		d.Handler.OnDeMuxStream(stream)
 	} else {
 		var packet *utils.AVPacket2
-		var codecId utils.AVCodecID
-		if id == VideoCodeIdH264 {
-			codecId = utils.AVCodecIdH264
-		}
-
 		packet = utils.NewAVPacket2(data[n:], int64(ts), int64(ts+uint32(ct)), key, utils.PacketTypeAVCC, utils.AVMediaTypeVideo, codecId)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
@@ -312,27 +303,17 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 }
 
 func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
-	n, sequenceHeader, format, err := ParseAudioData(data)
+	n, sequenceHeader, codecId, err := ParseAudioData(data)
 	if err != nil {
 		return err
 	}
 
 	if sequenceHeader {
 		var stream utils.AVStream
-		var codecId utils.AVCodecID
-		if format == SoundFormatAAC {
-			codecId = utils.AVCodecIdAAC
-		}
-
 		stream = utils.NewAVStream(utils.AVMediaTypeAudio, 0, codecId, data[n:], utils.ExtraTypeNONE)
 		d.Handler.OnDeMuxStream(stream)
 	} else {
 		var packet *utils.AVPacket2
-		var codecId utils.AVCodecID
-		if format == SoundFormatAAC {
-			codecId = utils.AVCodecIdAAC
-		}
-
 		packet = utils.NewAVPacket2(data[n:], int64(ts), int64(ts), true, utils.PacketTypeNONE, utils.AVMediaTypeAudio, codecId)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
@@ -343,32 +324,34 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 // ParseAudioData 解析音频数据
 // int 音频帧起始偏移量，例如AAC AUDIO DATA跳过pkt type后的位置
 // bool 是否是sequence header
-func ParseAudioData(data []byte) (int, bool, SoundFormat, error) {
+func ParseAudioData(data []byte) (int, bool, utils.AVCodecID, error) {
 	if len(data) < 4 {
-		return -1, false, SoundFormat(0), fmt.Errorf("invalid data")
+		return -1, false, utils.AVCodecIdNONE, fmt.Errorf("invalid data")
 	}
 
 	soundFormat := data[0] >> 4
 	//aac
-	if soundFormat == 10 {
+	if byte(SoundFormatAAC) == soundFormat {
 		//audio sequence header
 		if data[1] == 0x0 {
 			/*if len(data) < 4 {
 				return -1, false, SoundFormat(0), fmt.Errorf("MPEG4 Audio Config requires at least 2 bytes")
 			}*/
 
-			return 2, true, SoundFormatAAC, nil
+			return 2, true, utils.AVCodecIdAAC, nil
 		} else if data[1] == 0x1 {
-			return 2, false, SoundFormatAAC, nil
+			return 2, false, utils.AVCodecIdAAC, nil
 		}
+	} else if byte(SoundFormatMP3) == soundFormat {
+		return 0, false, utils.AVCodecIdMP3, nil
 	}
 
-	return -1, false, SoundFormat(0), fmt.Errorf("the codec %d is currently not supported in FLV", soundFormat)
+	return -1, false, utils.AVCodecIdNONE, fmt.Errorf("the codec %d is currently not supported in FLV", soundFormat)
 }
 
-func ParseVideoData(data []byte) (int, bool, bool, VideoCodecId, int, error) {
+func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) {
 	if len(data) < 6 {
-		return -1, false, false, VideoCodecId(0), 0, fmt.Errorf("invaild data")
+		return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("invaild data")
 	}
 
 	frameType := data[0] >> 4
@@ -378,8 +361,14 @@ func ParseVideoData(data []byte) (int, bool, bool, VideoCodecId, int, error) {
 		pktType := data[1]
 		ct := utils.BytesToUInt24(data[2], data[3], data[4])
 
-		return 5, pktType == 0, frameType == 1, VideoCodeIdH264, int(ct), nil
+		return 5, pktType == 0, frameType == 1, utils.AVCodecIdH264, int(ct), nil
+	} else if byte(VideoCodeIdH263) == codeId {
+		//pktType := data[1]
+		//ct := utils.BytesToUInt24(data[2], data[3], data[4])
+		pktType := 1
+		ct := 0
+		return 0, pktType == 0, frameType == 1, utils.AVCodecIdH263, int(ct), nil
 	}
 
-	return -1, false, false, VideoCodecId(0), 0, fmt.Errorf("the codec %d is currently not supported in FLV", codeId)
+	return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("the codec %d is currently not supported in FLV", codeId)
 }
