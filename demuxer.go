@@ -6,7 +6,7 @@ import "github.com/yangjiechina/avformat/utils"
 type OnDeMuxerHandler interface {
 	OnDeMuxStream(stream utils.AVStream)
 	OnDeMuxStreamDone()
-	OnDeMuxPacket(index int, packet *utils.AVPacket2)
+	OnDeMuxPacket(index int, packet utils.AVPacket)
 	OnDeMuxDone()
 }
 
