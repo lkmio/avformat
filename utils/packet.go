@@ -22,6 +22,12 @@ type AVPacket interface {
 	MediaType() AVMediaType //冗余媒体类型
 
 	CodecId() AVCodecID //冗余编码器Id
+
+	AnnexBPacketData() []byte
+
+	AVCCPacketData() []byte
+
+	Index() int
 }
 
 type avPacket struct {
@@ -36,14 +42,16 @@ type avPacket struct {
 	mediaType AVMediaType
 	//冗余编码器Id
 	codecId AVCodecID
+
+	index int
 }
 
-func NewAudioPacket(data []byte, dts, pts int64) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: true}
+func NewAudioPacket(data []byte, dts, pts int64, id AVCodecID, index int) AVPacket {
+	return &avPacket{data: data, dts: dts, pts: pts, key: true, mediaType: AVMediaTypeAudio, codecId: id, index: index}
 }
 
-func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType, mediaType AVMediaType, id AVCodecID) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: mediaType, codecId: id}
+func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType, id AVCodecID, index int) AVPacket {
+	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index}
 }
 
 func (pkt *avPacket) Dts() int64 {
@@ -72,4 +80,25 @@ func (pkt *avPacket) PacketType() PacketType {
 
 func (pkt *avPacket) CodecId() AVCodecID {
 	return pkt.codecId
+}
+
+func (pkt *avPacket) AnnexBPacketData() []byte {
+	Assert(AVMediaTypeVideo == pkt.mediaType)
+	Assert(false)
+	return nil
+}
+
+func (pkt *avPacket) AVCCPacketData() []byte {
+	Assert(AVMediaTypeVideo == pkt.mediaType)
+
+	if PacketTypeAVCC == pkt.packetType {
+		return pkt.data
+	}
+
+	Assert(false)
+	return nil
+}
+
+func (pkt *avPacket) Index() int {
+	return pkt.index
 }

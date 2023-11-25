@@ -2,6 +2,7 @@ package librtmp
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -16,6 +17,8 @@ type Parser struct {
 
 	chunks map[ChunkStreamID]*Chunk
 	chunk  *Chunk
+
+	handler avformat.OnTransDeMuxerHandler
 
 	//chunk大小 默认128
 	chunkSize int
@@ -77,13 +80,13 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateTimestamp:
 			for ; p.headerOffset < 3 && i < length; i++ {
-				p.chunk.timestamp <<= 8
-				p.chunk.timestamp |= uint32(data[i])
+				p.chunk.Timestamp <<= 8
+				p.chunk.Timestamp |= uint32(data[i])
 				p.headerOffset++
 			}
 
 			if p.headerOffset == 3 {
-				p.extended = p.chunk.timestamp == 0xFFFFFF
+				p.extended = p.chunk.Timestamp == 0xFFFFFF
 				if p.chunkType < ChunkType2 {
 					p.state = ParserStateMessageLength
 				} else if p.extended {
@@ -139,8 +142,8 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateExtendedTimestamp:
 			for ; p.headerOffset < 15 && i < length; i++ {
-				p.chunk.timestamp <<= 8
-				p.chunk.timestamp |= uint32(data[i])
+				p.chunk.Timestamp <<= 8
+				p.chunk.Timestamp |= uint32(data[i])
 				p.headerOffset++
 			}
 
@@ -161,13 +164,18 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			consume := utils.MinInt(need, p.chunkSize-(p.chunk.size%p.chunkSize))
 			consume = utils.MinInt(consume, rest)
 
-			if len(p.chunk.data) < p.chunk.Length {
-				bytes := make([]byte, p.chunk.Length+1024)
-				copy(bytes, p.chunk.data)
-				p.chunk.data = bytes
+			if (MessageTypeIDAudio == p.chunk.tid || MessageTypeIDVideo == p.chunk.tid) && p.handler != nil {
+				p.handler.OnPartPacket(int(p.chunk.tid)%8, data[i:i+consume], true)
+			} else {
+				if len(p.chunk.data) < p.chunk.Length {
+					bytes := make([]byte, p.chunk.Length+1024)
+					copy(bytes, p.chunk.data)
+					p.chunk.data = bytes
+				}
+
+				copy(p.chunk.data[p.chunk.size:], data[i:i+consume])
 			}
 
-			copy(p.chunk.data[p.chunk.size:], data[i:i+consume])
 			p.chunk.size += consume
 
 			i += consume

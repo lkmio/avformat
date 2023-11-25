@@ -59,6 +59,10 @@ type DeMuxer struct {
 	headerCompleted bool
 	//保存当前正在读取的Tag
 	tag Tag
+
+	audioIndex int
+
+	videoIndex int
 }
 
 type Tag struct {
@@ -69,6 +73,10 @@ type Tag struct {
 
 	data []byte
 	size int
+}
+
+func NewDeMuxer() DeMuxer {
+	return DeMuxer{audioIndex: -1, videoIndex: -1}
 }
 
 func (d *DeMuxer) readScriptDataObject(data []byte) error {
@@ -92,77 +100,6 @@ func (d *DeMuxer) readScriptDataObject(data []byte) error {
 	d.metaData = metaData
 	return nil
 }
-
-/*
-func Valid(path string) (bool, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return false, err
-	}
-
-	h := make([]byte, 9)
-	n, err := file.Read(h)
-
-	if err != nil {
-		return false, err
-	}
-	if n < 9 {
-		return false, fmt.Errorf("flv探测数据不够 size:%d", n)
-	}
-
-	if n < 9 {
-		return false, fmt.Errorf("flv探测数据不够 size:%d", n)
-	}
-
-	if h[0] != 0x46 || h[1] != 0x4C || h[2] != 0x56 {
-		return false, fmt.Errorf("invalid data")
-	}
-
-	version := h[3]
-	flags := typeFlag(h[4])
-	dataOffset := binary.BigEndian.Uint32(h[5:])
-	if version == 1 && dataOffset != 9 {
-		return false, fmt.Errorf("invalid data")
-	}
-
-	if !flags.ExistAudio() && !flags.ExistAudio() {
-		return false, fmt.Errorf("invalid data")
-	}
-
-	tagHeader := make([]byte, 15)
-	var offset int64
-	offset = 9
-
-	for {
-		n, err = file.ReadAt(tagHeader, offset)
-		if err != nil {
-			return false, err
-		}
-		if n < 15 {
-			return false, fmt.Errorf("flv探测数据不够 size:%d", n)
-		}
-
-		//pre size
-		_ = binary.BigEndian.Uint32(tagHeader)
-		tagType := tagHeader[4]
-		dataSize := binary.BigEndian.Uint32(tagHeader[5:]) >> 8
-
-		if TagTypeAudioData == TagType(tagType) || TagTypeVideoData == TagType(tagType) {
-			return true, nil
-		}
-
-		offset += 15 + int64(dataSize)
-		if stat.Size() < offset {
-			return false, fmt.Errorf("invalid data")
-		}
-	}
-}*/
 
 func (d *DeMuxer) readHeader(data []byte) error {
 	if len(data) < 9 {
@@ -291,11 +228,20 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 
 	if sequenceHeader {
 		var stream utils.AVStream
-		stream = utils.NewAVStream(utils.AVMediaTypeVideo, 0, codecId, data[n:], utils.ExtraTypeM4VC)
+		if d.audioIndex == -1 {
+			d.videoIndex = 0
+		} else {
+			d.videoIndex = 1
+		}
+
+		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC)
 		d.Handler.OnDeMuxStream(stream)
 	} else {
-		var packet *utils.AVPacket2
-		packet = utils.NewAVPacket2(data[n:], int64(ts), int64(ts+uint32(ct)), key, utils.PacketTypeAVCC, utils.AVMediaTypeVideo, codecId)
+		if d.videoIndex == -1 {
+			return fmt.Errorf("missing video sequence header")
+		}
+
+		packet := utils.NewVideoPacket(data[n:], int64(ts), int64(ts+uint32(ct)), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
 
@@ -310,11 +256,20 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 
 	if sequenceHeader {
 		var stream utils.AVStream
-		stream = utils.NewAVStream(utils.AVMediaTypeAudio, 0, codecId, data[n:], utils.ExtraTypeNONE)
+		if d.videoIndex == -1 {
+			d.audioIndex = 0
+		} else {
+			d.audioIndex = 1
+		}
+
+		stream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
 		d.Handler.OnDeMuxStream(stream)
 	} else {
-		var packet *utils.AVPacket2
-		packet = utils.NewAVPacket2(data[n:], int64(ts), int64(ts), true, utils.PacketTypeNONE, utils.AVMediaTypeAudio, codecId)
+		if d.audioIndex == -1 {
+			return fmt.Errorf("missing audio sequence header")
+		}
+
+		packet := utils.NewAudioPacket(data[n:], int64(ts), int64(ts), codecId, d.audioIndex)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
 
@@ -322,8 +277,8 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 }
 
 // ParseAudioData 解析音频数据
-// int 音频帧起始偏移量，例如AAC AUDIO DATA跳过pkt type后的位置
-// bool 是否是sequence header
+// @return int 音频帧起始偏移量，例如AAC AUDIO DATA跳过pkt type后的位置
+// @return bool 是否是sequence header
 func ParseAudioData(data []byte) (int, bool, utils.AVCodecID, error) {
 	if len(data) < 4 {
 		return -1, false, utils.AVCodecIdNONE, fmt.Errorf("invalid data")

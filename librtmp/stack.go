@@ -33,9 +33,9 @@ func init() {
 }
 
 type OnEventHandler interface {
-	OnPublish(app, stream string, response chan avformat.HookState)
+	OnPublish(app, stream string, response chan utils.HookState)
 
-	OnPlay(app, stream string, response chan avformat.HookState)
+	OnPlay(app, stream string, response chan utils.HookState)
 }
 
 type OnPublishHandler interface {
@@ -61,12 +61,16 @@ type Stack struct {
 }
 
 func NewStack(handler OnEventHandler) *Stack {
-	avformat.Assert(handler != nil)
+	utils.Assert(handler != nil)
 	return &Stack{parser: NewParser(), handler: handler}
 }
 
 func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
 	s.publisherHandler = handler
+}
+
+func (s *Stack) SetOnTransDeMuxerHandler(handler avformat.OnTransDeMuxerHandler) {
+	s.parser.handler = handler
 }
 
 func (s *Stack) DoHandshake(conn net.Conn, data []byte) (int, error) {
@@ -94,7 +98,7 @@ func (s *Stack) DoHandshake(conn net.Conn, data []byte) (int, error) {
 			i += HandshakePacketSize
 			bytes := data[i-HandshakePacketSize : i]
 			n := GenerateS0S1S2(s0s1s2, bytes)
-			avformat.Assert(n == len(s0s1s2))
+			utils.Assert(n == len(s0s1s2))
 
 			_, err := conn.Write(s0s1s2)
 			if err != nil {
@@ -211,10 +215,20 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 		//p.sendWindowAcknowledgementSize()
 		break
 	case MessageTypeIDAudio:
-		s.publisherHandler.OnAudio(chunk.data[:chunk.Length], chunk.timestamp)
+		if s.parser.handler == nil {
+			s.publisherHandler.OnAudio(chunk.data[:chunk.Length], chunk.Timestamp)
+		} else {
+			s.publisherHandler.OnAudio(nil, chunk.Timestamp)
+		}
+
 		break
 	case MessageTypeIDVideo:
-		s.publisherHandler.OnVideo(chunk.data[:chunk.Length], chunk.timestamp)
+		if s.parser.handler == nil {
+			s.publisherHandler.OnVideo(chunk.data[:chunk.Length], chunk.Timestamp)
+		} else {
+			s.publisherHandler.OnVideo(nil, chunk.Timestamp)
+		}
+
 		break
 	case MessageTypeIDDataAMF0:
 		//onMetaData
@@ -253,7 +267,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			acknow := Chunk{
 				type_:     ChunkType0,
 				csid:      ChunkStreamIdNetwork,
-				timestamp: 0,
+				Timestamp: 0,
 				tid:       MessageTypeIDWindowAcknowledgementSize,
 				sid:       0,
 				Length:    len(windowSize),
@@ -265,7 +279,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			bandwidth := Chunk{
 				type_:     ChunkType0,
 				csid:      ChunkStreamIdNetwork,
-				timestamp: 0,
+				Timestamp: 0,
 				tid:       MessageTypeIDSetPeerBandWith,
 				sid:       0,
 				Length:    len(peerBandwidth),
@@ -277,7 +291,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			setChunkSize := Chunk{
 				type_:     ChunkType0,
 				csid:      ChunkStreamIdNetwork,
-				timestamp: 0,
+				Timestamp: 0,
 				tid:       MessageTypeIDSetChunkSize,
 				sid:       0,
 				Length:    len(chunkSize),
@@ -295,7 +309,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			response := Chunk{
 				type_:     ChunkType0,
 				csid:      ChunkStreamIdSystem,
-				timestamp: 0,
+				Timestamp: 0,
 				tid:       MessageTypeIDCommandAMF0,
 				sid:       0,
 				Length:    n,
@@ -324,7 +338,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			response := Chunk{
 				type_:     ChunkType0,
 				csid:      ChunkStreamIdSystem,
-				timestamp: 0,
+				Timestamp: 0,
 				tid:       MessageTypeIDCommandAMF0,
 				sid:       0,
 				Length:    n,
@@ -353,13 +367,13 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			}
 
 			stream := s.app + "/" + s.stream
-			state := make(chan avformat.HookState, 1)
+			state := make(chan utils.HookState, 1)
 			s.handler.OnPublish(s.app, stream, state)
 
 			//在未收到响应之前，拒绝接受任何消息
 			select {
 			case response := <-state:
-				if avformat.HookStateOK == response {
+				if utils.HookStateOK == response {
 					return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start publishing")
 				} else {
 					return s.sendStatus(conn, transactionId, "error", "NetStream.Publish.BadName", "Already publishing")
@@ -376,13 +390,13 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			}
 
 			stream := s.app + "/" + s.stream
-			state := make(chan avformat.HookState, 1)
+			state := make(chan utils.HookState, 1)
 			s.handler.OnPlay(s.app, stream, state)
 
 			//在未收到响应之前，拒绝接受任何消息
 			select {
 			case response := <-state:
-				if avformat.HookStateOK == response {
+				if utils.HookStateOK == response {
 					return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start live")
 				} else {
 					return s.sendStatus(conn, transactionId, "error", "NetStream.Publish.BadName", "Already publishing")
@@ -430,7 +444,7 @@ func (s *Stack) sendStatus(conn net.Conn, transactionId float64, level, code, de
 	response := Chunk{
 		type_:     ChunkType0,
 		csid:      ChunkStreamIdSystem,
-		timestamp: 0,
+		Timestamp: 0,
 		tid:       MessageTypeIDCommandAMF0,
 		sid:       0,
 		Length:    n,

@@ -240,7 +240,7 @@ func (p *Puller) connect() {
 	chunk := Chunk{
 		type_:     ChunkType0,
 		csid:      ChunkStreamIdSystem,
-		timestamp: 0,
+		Timestamp: 0,
 		Length:    length,
 		tid:       MessageTypeIDCommandAMF0,
 		sid:       0,
@@ -253,7 +253,7 @@ func (p *Puller) sendWindowAcknowledgementSize() {
 	header := Chunk{
 		type_:     ChunkType0,
 		csid:      ChunkStreamIdNetwork,
-		timestamp: 0,
+		Timestamp: 0,
 		Length:    4,
 		tid:       MessageTypeIDWindowAcknowledgementSize,
 		sid:       0,
@@ -274,7 +274,7 @@ func (p *Puller) createStream() {
 	header := Chunk{
 		type_:     ChunkType0,
 		csid:      ChunkStreamIdNetwork,
-		timestamp: 0,
+		Timestamp: 0,
 		Length:    length,
 		tid:       MessageTypeIDCommandAMF0,
 		sid:       0,
@@ -302,7 +302,7 @@ func (p *Puller) play(streamId float64) {
 	chunk := Chunk{
 		type_:     ChunkType0,
 		csid:      ChunkStreamIdSystem,
-		timestamp: 0,
+		Timestamp: 0,
 		Length:    length,
 		tid:       MessageTypeIDCommandAMF0,
 		sid:       int(streamId),
@@ -365,14 +365,14 @@ func (p *Puller) processChunk(data []byte) error {
 
 			case ParserStateTimestamp:
 				for p.parser.headerOffset < 3 && i < length {
-					p.parser.msg.timestamp <<= 8
-					p.parser.msg.timestamp |= int(data[i])
+					p.parser.msg.Timestamp <<= 8
+					p.parser.msg.Timestamp |= int(data[i])
 					p.parser.headerOffset++
 					i++
 				}
 
 				if p.parser.headerOffset == 3 {
-					p.parser.extended = p.parser.msg.timestamp == 0xFFFFFF
+					p.parser.extended = p.parser.msg.Timestamp == 0xFFFFFF
 					if p.parser.chunkType < ChunkType2 {
 						p.parser.state = ParserStateMessageLength
 					} else if p.parser.extended {
@@ -428,8 +428,8 @@ func (p *Puller) processChunk(data []byte) error {
 
 			case ParserStateExtendedTimestamp:
 				for p.parser.headerOffset < 15 && i < length {
-					p.parser.msg.timestamp <<= 8
-					p.parser.msg.timestamp |= int(data[i])
+					p.parser.msg.Timestamp <<= 8
+					p.parser.msg.Timestamp |= int(data[i])
 					p.parser.headerOffset++
 					i++
 				}
@@ -459,7 +459,7 @@ func (p *Puller) processChunk(data []byte) error {
 
 				if p.parser.msg.size >= p.parser.msg.MessageLength {
 					if p.parser.msg.size != 0 {
-						err := p.processMessage(p.parser.msg.tid, p.parser.msg.payload[:p.parser.msg.size], p.parser.msg.timestamp)
+						err := p.processMessage(p.parser.msg.tid, p.parser.msg.payload[:p.parser.msg.size], p.parser.msg.Timestamp)
 						if err != nil {
 							return err
 						}

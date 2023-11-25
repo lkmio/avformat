@@ -3,7 +3,6 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangjiechina/avformat"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -32,7 +31,7 @@ type 0
 0 1 2 3
 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-| timestamp |message length |
+| Timestamp |message length |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 | message length (cont) |message type id| msg stream id |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -108,7 +107,7 @@ type Chunk struct {
 	type_ ChunkType     //fmt 1-3bytes.低6位等于0,2字节;低6位等于1,3字节
 	csid  ChunkStreamID //chunk stream id. customized by users
 
-	timestamp uint32
+	Timestamp uint32
 	//表明的chunk长度
 	Length int           //message length
 	tid    MessageTypeID //message type id
@@ -118,6 +117,23 @@ type Chunk struct {
 	data []byte
 	//实际接受到的chunk大小
 	size int
+}
+
+func NewAudioChunk() Chunk {
+	//	CHUNK_TYPE_0,CHUNK_STREAM_ID_AUDIO,ts,MESSAGE_TYPE_ID_AUDIO,0,data,size
+	return Chunk{
+		type_: ChunkType0,
+		csid:  ChunkStreamIdAudio,
+		tid:   MessageTypeIDAudio,
+	}
+}
+
+func NewVideoChunk() Chunk {
+	return Chunk{
+		type_: ChunkType0,
+		csid:  ChunkStreamIdVideo,
+		tid:   MessageTypeIDVideo,
+	}
 }
 
 func (h *Chunk) ToBytes(dst []byte) int {
@@ -139,10 +155,10 @@ func (h *Chunk) ToBytes(dst []byte) int {
 	}
 
 	if h.type_ < ChunkType3 {
-		if h.timestamp >= 0xFFFFFF {
+		if h.Timestamp >= 0xFFFFFF {
 			utils.WriteUInt24(dst[index:], 0xFFFFFF)
 		} else {
-			utils.WriteUInt24(dst[index:], uint32(h.timestamp))
+			utils.WriteUInt24(dst[index:], uint32(h.Timestamp))
 		}
 		index += 3
 	}
@@ -158,8 +174,8 @@ func (h *Chunk) ToBytes(dst []byte) int {
 		index += 4
 	}
 
-	if h.timestamp >= 0xFFFFFF {
-		binary.BigEndian.PutUint32(dst[index:], uint32(h.timestamp))
+	if h.Timestamp >= 0xFFFFFF {
+		binary.BigEndian.PutUint32(dst[index:], uint32(h.Timestamp))
 		index += 4
 	}
 
@@ -167,7 +183,7 @@ func (h *Chunk) ToBytes(dst []byte) int {
 }
 
 func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
-	avformat.Assert(len(h.data) >= h.Length)
+	utils.Assert(len(h.data) >= h.Length)
 	n := h.ToBytes(data)
 	var length = h.Length
 
@@ -207,13 +223,13 @@ func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
 	}
 }
 
-func (c *Chunk) Reset() {
+func (h *Chunk) Reset() {
 	//c.csid = 0
-	c.timestamp = 0
+	h.Timestamp = 0
 	//c.Length	 = 0
-	c.tid = 0
-	c.sid = 0
-	c.size = 0
+	h.tid = 0
+	h.sid = 0
+	h.size = 0
 }
 
 func readChunkHeader(src []byte) (Chunk, int, error) {
@@ -228,7 +244,7 @@ func readChunkHeader(src []byte) (Chunk, int, error) {
 	}
 
 	if header.type_ < ChunkType3 {
-		header.timestamp = uint32(utils.BytesToInt(src[i : i+3]))
+		header.Timestamp = uint32(utils.BytesToInt(src[i : i+3]))
 		i += 3
 	}
 
@@ -244,8 +260,8 @@ func readChunkHeader(src []byte) (Chunk, int, error) {
 		i += 4
 	}
 
-	if header.timestamp == 0xFFFFFF {
-		header.timestamp = binary.BigEndian.Uint32(src[i:])
+	if header.Timestamp == 0xFFFFFF {
+		header.Timestamp = binary.BigEndian.Uint32(src[i:])
 		i += 4
 	}
 

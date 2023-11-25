@@ -2,7 +2,6 @@ package libflv
 
 import (
 	"encoding/binary"
-	"github.com/yangjiechina/avformat"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -30,7 +29,7 @@ func NewMuxer(audioCodecId, videoCodecId utils.AVCodecID, soundRate, soundType, 
 			m.soundRate = SoundRate44000HZ
 			m.soundType = 1
 		} else {
-			avformat.Assert(false)
+			utils.Assert(false)
 		}
 	}
 
@@ -38,7 +37,7 @@ func NewMuxer(audioCodecId, videoCodecId utils.AVCodecID, soundRate, soundType, 
 		if utils.AVCodecIdH264 == videoCodecId {
 			m.videoCodecId = VideoCodeIdH264
 		} else {
-			avformat.Assert(false)
+			utils.Assert(false)
 		}
 	}
 

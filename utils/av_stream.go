@@ -17,6 +17,8 @@ type AVStream interface {
 
 	Extra() []byte
 
+	SetExtraData(data []byte)
+
 	M4VCExtraData() []byte
 
 	AnnexBExtraData() []byte
@@ -57,6 +59,10 @@ func (a *avStream) CodecId() AVCodecID {
 
 func (a *avStream) Extra() []byte {
 	return a.extra
+}
+
+func (a *avStream) SetExtraData(data []byte) {
+	a.extra = data
 }
 
 func (a *avStream) M4VCExtraData() []byte {

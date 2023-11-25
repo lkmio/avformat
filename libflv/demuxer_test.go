@@ -26,7 +26,7 @@ func (h *Handler) OnDeMuxStreamDone() {
 
 }
 
-func (h *Handler) OnDeMuxPacket(index int, packet *utils.AVPacket2) {
+func (h *Handler) OnDeMuxPacket(index int, packet utils.AVPacket) {
 	println(fmt.Sprintf("OnDeMuxPacket dts:%d pts:%d", packet.Dts(), packet.Pts()))
 
 	if h.first {
