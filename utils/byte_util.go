@@ -60,6 +60,14 @@ func MinInt(a int, b int) int {
 	return a
 }
 
+func MaxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
 func ReadBits() {
 
 }
