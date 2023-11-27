@@ -63,6 +63,9 @@ type DeMuxer struct {
 	audioIndex int
 
 	videoIndex int
+
+	audioTs int64
+	videoTs int64
 }
 
 type Tag struct {
@@ -241,7 +244,8 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 			return fmt.Errorf("missing video sequence header")
 		}
 
-		packet := utils.NewVideoPacket(data[n:], int64(ts), int64(ts+uint32(ct)), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
+		d.audioTs += int64(ts)
+		packet := utils.NewVideoPacket(data[n:], d.audioTs, d.audioTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
 
@@ -269,7 +273,8 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 			return fmt.Errorf("missing audio sequence header")
 		}
 
-		packet := utils.NewAudioPacket(data[n:], int64(ts), int64(ts), codecId, d.audioIndex)
+		d.audioTs += int64(ts)
+		packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex)
 		d.Handler.OnDeMuxPacket(0, packet)
 	}
 
