@@ -62,7 +62,7 @@ type Stack struct {
 
 func NewStack(handler OnEventHandler) *Stack {
 	utils.Assert(handler != nil)
-	return &Stack{parser: NewParser(), handler: handler}
+	return &Stack{parser: NewParser(DefaultChunkSize), handler: handler}
 }
 
 func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {

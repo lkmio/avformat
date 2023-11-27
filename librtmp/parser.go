@@ -24,8 +24,8 @@ type Parser struct {
 	chunkSize int
 }
 
-func NewParser() *Parser {
-	return &Parser{chunkSize: DefaultChunkSize, chunks: make(map[ChunkStreamID]*Chunk, 10)}
+func NewParser(chunkSize int) *Parser {
+	return &Parser{chunkSize: chunkSize, chunks: make(map[ChunkStreamID]*Chunk, 10)}
 }
 
 func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
@@ -180,7 +180,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 			i += consume
 			if p.chunk.size >= p.chunk.Length {
-
+				p.state = ParserStateInit
 				return p.chunk, i, nil
 			} else if p.chunk.size%p.chunkSize == 0 {
 				p.state = ParserStateInit

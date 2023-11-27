@@ -142,7 +142,7 @@ func (h *Chunk) ToBytes(dst []byte) int {
 
 	dst[0] = byte(h.type_) << 6
 	if h.csid <= 63 {
-		dst[0] = dst[0] | 0x3
+		dst[0] = dst[0] | byte(h.csid)
 	} else if h.csid <= 0xFF {
 		dst[0] = dst[0] & 0xC0
 		dst[1] = byte(h.csid)

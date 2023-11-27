@@ -13,7 +13,7 @@ type Muxer struct {
 	soundFormat  SoundFormat
 	soundRate    SoundRate
 	soundType    byte
-	soundSize    byte
+	soundSize    byte //0-8位深/1-16位深
 	preSize      uint32
 }
 
@@ -21,6 +21,7 @@ func NewMuxer(audioCodecId, videoCodecId utils.AVCodecID, soundRate, soundType, 
 	m := &Muxer{
 		existAudio: utils.AVCodecIdNONE != audioCodecId,
 		existVideo: utils.AVCodecIdNONE != videoCodecId,
+		soundSize:  1,
 	}
 
 	if m.existAudio {
@@ -102,7 +103,7 @@ func (m *Muxer) WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, time
 
 func (m *Muxer) WriteAudioData(dst []byte, header bool) int {
 	_ = dst[1]
-	dst[0] = byte(m.soundFormat)<<4 | byte(m.soundRate) | m.soundSize | m.soundType
+	dst[0] = byte(m.soundFormat)<<4 | byte(m.soundRate)<<2 | m.soundSize<<1 | m.soundType
 	if header {
 		dst[1] = 0
 	} else {
