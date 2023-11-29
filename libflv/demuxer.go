@@ -3,7 +3,7 @@ package libflv
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangjiechina/avformat"
+	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -39,7 +39,7 @@ const (
 type MP3Header uint32
 
 type DeMuxer struct {
-	avformat.DeMuxerImpl
+	stream.DeMuxerImpl
 
 	/**
 	duration: DOUBLE
@@ -78,8 +78,8 @@ type Tag struct {
 	size int
 }
 
-func NewDeMuxer() DeMuxer {
-	return DeMuxer{audioIndex: -1, videoIndex: -1}
+func NewDeMuxer() stream.DeMuxer {
+	return &DeMuxer{audioIndex: -1, videoIndex: -1}
 }
 
 func (d *DeMuxer) readScriptDataObject(data []byte) error {
@@ -246,7 +246,7 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 
 		d.audioTs += int64(ts)
 		packet := utils.NewVideoPacket(data[n:], d.audioTs, d.audioTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
-		d.Handler.OnDeMuxPacket(0, packet)
+		d.Handler.OnDeMuxPacket(packet)
 	}
 
 	return nil
@@ -275,7 +275,7 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 
 		d.audioTs += int64(ts)
 		packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex)
-		d.Handler.OnDeMuxPacket(0, packet)
+		d.Handler.OnDeMuxPacket(packet)
 	}
 
 	return nil

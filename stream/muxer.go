@@ -1,4 +1,4 @@
-package avformat
+package stream
 
 import "github.com/yangjiechina/avformat/utils"
 

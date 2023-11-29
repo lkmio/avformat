@@ -1,4 +1,4 @@
-package avformat
+package stream
 
 type Client interface {
 	Open(url string)

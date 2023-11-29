@@ -1,4 +1,4 @@
-package avformat
+package stream
 
 import "github.com/yangjiechina/avformat/utils"
 
@@ -6,7 +6,7 @@ import "github.com/yangjiechina/avformat/utils"
 type OnDeMuxerHandler interface {
 	OnDeMuxStream(stream utils.AVStream)
 	OnDeMuxStreamDone()
-	OnDeMuxPacket(index int, packet utils.AVPacket)
+	OnDeMuxPacket(packet utils.AVPacket)
 	OnDeMuxDone()
 }
 
@@ -14,7 +14,7 @@ type OnDeMuxerHandler interface {
 type DeMuxer interface {
 	// Input 输入需要解复用的数据
 	// @param vod 调用者和解复用器之间传递的私有数据
-	Input(data []byte, vod interface{})
+	Input(data []byte /*, vod interface{}*/) (int, error)
 
 	SetHandler(handler OnDeMuxerHandler)
 }

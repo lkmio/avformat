@@ -3,8 +3,8 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangjiechina/avformat"
 	"github.com/yangjiechina/avformat/libflv"
+	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
 	"net"
 )
@@ -69,7 +69,7 @@ func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
 	s.publisherHandler = handler
 }
 
-func (s *Stack) SetOnTransDeMuxerHandler(handler avformat.OnTransDeMuxerHandler) {
+func (s *Stack) SetOnTransDeMuxerHandler(handler stream.OnTransDeMuxerHandler) {
 	s.parser.handler = handler
 }
 

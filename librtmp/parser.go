@@ -2,7 +2,7 @@ package librtmp
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat"
+	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -18,7 +18,7 @@ type Parser struct {
 	chunks map[ChunkStreamID]*Chunk
 	chunk  *Chunk
 
-	handler avformat.OnTransDeMuxerHandler
+	handler stream.OnTransDeMuxerHandler
 
 	//chunk大小 默认128
 	chunkSize int
