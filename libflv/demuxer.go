@@ -66,6 +66,8 @@ type DeMuxer struct {
 
 	audioTs int64
 	videoTs int64
+
+	completed bool
 }
 
 type Tag struct {
@@ -230,6 +232,10 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 	}
 
 	if sequenceHeader {
+		if d.completed {
+			return nil
+		}
+
 		var stream utils.AVStream
 		if d.audioIndex == -1 {
 			d.videoIndex = 0
@@ -239,6 +245,10 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 
 		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC)
 		d.Handler.OnDeMuxStream(stream)
+
+		if d.audioIndex != -1 {
+			d.Handler.OnDeMuxStreamDone()
+		}
 	} else {
 		if d.videoIndex == -1 {
 			return fmt.Errorf("missing video sequence header")
@@ -259,6 +269,10 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 	}
 
 	if sequenceHeader {
+		if d.completed {
+			return nil
+		}
+		
 		var stream utils.AVStream
 		if d.videoIndex == -1 {
 			d.audioIndex = 0
@@ -268,6 +282,10 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 
 		stream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
 		d.Handler.OnDeMuxStream(stream)
+
+		if d.videoIndex != -1 {
+			d.Handler.OnDeMuxStreamDone()
+		}
 	} else {
 		if d.audioIndex == -1 {
 			return fmt.Errorf("missing audio sequence header")
