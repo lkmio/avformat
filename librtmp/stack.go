@@ -3,10 +3,11 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
+	"net"
+
 	"github.com/yangjiechina/avformat/libflv"
 	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
-	"net"
 )
 
 const (
@@ -109,6 +110,7 @@ func (s *Stack) DoHandshake(conn net.Conn, data []byte) (int, error) {
 			if length-i >= HandshakePacketSize {
 				s.handshakeState = HandshakeStateDone
 				i += HandshakePacketSize
+				break
 			}
 		}
 	}
