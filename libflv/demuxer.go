@@ -254,8 +254,8 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 			return fmt.Errorf("missing video sequence header")
 		}
 
-		d.audioTs += int64(ts)
-		packet := utils.NewVideoPacket(data[n:], d.audioTs, d.audioTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
+		d.videoTs += int64(ts)
+		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
 		d.Handler.OnDeMuxPacket(packet)
 	}
 
@@ -272,7 +272,7 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 		if d.completed {
 			return nil
 		}
-		
+
 		var stream utils.AVStream
 		if d.videoIndex == -1 {
 			d.audioIndex = 0
