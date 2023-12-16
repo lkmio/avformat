@@ -34,7 +34,8 @@ const (
 )
 
 var (
-	streamTypes map[int]int
+	streamTypes           map[int]int
+	codecId2StreamTypeMap map[utils.AVCodecID]int
 )
 
 type StreamType int
@@ -61,6 +62,15 @@ func init() {
 		StreamTypeVideoHEVC:      StreamIdVideo,
 		StreamTypeVideoCAVS:      StreamIdVideo,
 		StreamTypeAudioAC3:       StreamIdAudio,
+	}
+
+	codecId2StreamTypeMap = map[utils.AVCodecID]int{
+		utils.AVCodecIdMP3: StreamTypeVideoMPEG1,
+		utils.AVCodecIdAAC: StreamTypeAudioAAC,
+
+		utils.AVCodecIdH264:  StreamTypeVideoH264,
+		utils.AVCodecIdHEVC:  StreamTypeVideoHEVC,
+		utils.AVCodecIdMPEG4: StreamTypeVideoMpeg4,
 	}
 }
 

@@ -6,6 +6,8 @@ const (
 	//PSINIT = 0x0000
 	PSIPMT  = 0x0002
 	PSITSDT = 0x0002
+
+	TsPacketSize = 188
 )
 
 type TSHeader struct {
@@ -17,6 +19,13 @@ type TSHeader struct {
 	transportScramblingControl byte //2bits
 	adaptationFieldControl     byte //2bits 10/11/01/11
 	continuityCounter          byte //4bits
+}
+
+func (h *TSHeader) toBytes(dst []byte) {
+	dst[0] = 0x47
+	dst[1] = (h.transportErrorIndicator & 0x1 << 7) | (h.payloadUnitStartIndicator & 0x1 << 6) | (h.transportPriority & 0x1 << 5) | byte(h.pid>>8&0x1F)
+	dst[2] = byte(h.pid)
+	dst[3] = (h.transportScramblingControl & 0x3 << 6) | (h.adaptationFieldControl & 0x3 << 4) | (h.continuityCounter & 0xF)
 }
 
 func readTSHeader(data []byte) (TSHeader, int) {
@@ -136,4 +145,151 @@ func readPMT(data []byte) []int {
 func readCASection(data []byte) int {
 
 	return 0
+}
+
+func generatePAT(data []byte, counter byte) int {
+	var n int
+	header := TSHeader{0x47, 0, 0, 0, PSIPAT, 0, 0, counter}
+	header.toBytes(data)
+	n += 4
+	//section 2.4.4.3
+	//program_association_section() {
+	//	table_id 8 uimsbf
+	//	section_syntax_indicator 1 bslbf
+	//	'0' 1 bslbf
+	//	reserved 2 bslbf
+	//	section_length 12 uimsbf
+	//	transport_stream_id 16 uimsbf
+	//	reserved 2 bslbf
+	//	version_number 5 uimsbf
+	//	current_next_indicator 1 bslbf
+	//	section_number 8 uimsbf
+	//	last_section_number 8 uimsbf
+	//	for (i = 0; i < N; i++) {
+	//	program_number 16 uimsbf
+	//	reserved 3 bslbf
+	//	if (program_number = = '0') {
+	//	ISO/IEC 13818-1：2007(C)
+	//	44 ITU-T H.222.0建议书 (05/2006)
+	//	表 2-30－节目相关分段
+	//	句 法 比 特 数 助 记 符
+	//	network_PID 13 uimsbf
+	//	}
+	//	else {
+	//	program_map_PID 13 uimsbf
+	//	}
+	//	}
+	//	CRC_32 32 rpchof
+	//}
+	var sectionLength int16
+	var transportStreamId int64
+	//PAT发生变化时，版本号发生变化
+	//currentNextIndicator 为1时，当前PAT有效，为0时，下个PAT才生效
+	var versionNumber byte
+	var currentNextIndicator byte
+
+	//PAT的序号，第一个PAT必须要从0开始
+	var sectionNumber byte
+	var lastSectionNumber byte
+
+	sectionLength = 8
+
+	data[n] = 0x00
+	n++
+	data[n] = 0x80 | (byte(sectionLength>>8) & 0x3)
+	n++
+	data[n] = byte(sectionLength)
+	n++
+	data[n] = byte(transportStreamId >> 8)
+	n++
+	data[n] = byte(transportStreamId)
+	n++
+	data[n] = (versionNumber << 6) | (currentNextIndicator & 0x1)
+	n++
+	data[n] = sectionNumber
+	n++
+	data[n] = lastSectionNumber
+	n++
+
+	//program_number 为0时，后面必须时network_PID. 此处封装PMT_ID
+	data[n] = 0
+	n++
+	data[n] = 0x1
+	n++
+
+	data[n] = PSIPMT >> 8 & 0x10
+	n++
+	data[n] = PSIPMT & 0xFFFF
+	n++
+
+	return n
+}
+
+func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
+	header := TSHeader{0x47, 0, 0, 0, PSIPMT, 0, 0, counter}
+	header.toBytes(data)
+	var n int
+	n += 4
+	//section 2.4.4.8
+	var sectionLength int16
+	var programNumber int16
+	var versionNumber byte
+	var currentNextIndicator byte
+	var sectionNumber byte
+	var lastSectionNumber byte
+	var pcrPid int16
+	var infoLength int16
+
+	data[n] = PSIPMT
+	n++
+	data[n] = (1 << 7) | byte(sectionLength>>8&0x3)
+	n++
+	data[n] = byte(sectionLength)
+	n++
+
+	data[n] = byte(programNumber >> 8)
+	n++
+	data[n] = byte(programNumber)
+	n++
+
+	data[n] = (versionNumber & 0x10 << 1) | (currentNextIndicator & 0x1)
+	n++
+
+	data[n] = sectionNumber
+	n++
+	data[n] = lastSectionNumber
+	n++
+	data[n] = byte(pcrPid & 0x10)
+	n++
+	data[n] = byte(pcrPid)
+	n++
+
+	data[n] = byte(infoLength >> 8 & 0x3)
+	n++
+	data[n] = byte(infoLength)
+	n++
+
+	if infoLength > 0 {
+
+	}
+
+	n += int(infoLength)
+
+	for _, streamType := range streamTypes {
+		data[n] = byte(streamType[0])
+		n++
+		//elementary_PID
+		//负载PES的TS包的PID
+		data[n] = byte(streamType[1] & 0x10)
+		n++
+		data[n] = byte(streamType[1])
+		n++
+
+		data[n] = 0x0
+		n++
+		data[n] = 0x0
+		n++
+	}
+
+	return n
 }
