@@ -10,6 +10,14 @@ const (
 	TsPacketSize = 188
 )
 
+var stuffing [188]byte
+
+func init() {
+	for i := 0; i < len(stuffing); i++ {
+		stuffing[i] = 0xFF
+	}
+}
+
 type TSHeader struct {
 	syncByte                   byte //1byte fixed 0x47
 	transportErrorIndicator    byte //1bit

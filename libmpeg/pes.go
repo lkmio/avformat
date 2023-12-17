@@ -39,10 +39,11 @@ type PESHeader struct {
 	dts int64
 }
 
-func NewPESPacket() *PESHeader {
+func NewPESPacket(streamId byte) *PESHeader {
 	return &PESHeader{
-		pts: -1,
-		dts: -1,
+		streamId: streamId,
+		pts:      -1,
+		dts:      -1,
 	}
 }
 
