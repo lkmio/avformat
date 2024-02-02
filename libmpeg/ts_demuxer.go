@@ -1,11 +1,6 @@
 package libmpeg
 
-import (
-	"fmt"
-	"github.com/yangjiechina/avformat/utils"
-)
-
-type TSDeMuxer struct {
+/*type TSDeMuxer struct {
 	pmt      []int
 	pid      []int
 	esPacket []byte
@@ -96,4 +91,4 @@ func (t *TSDeMuxer) doRead(data []byte) error {
 		t.currentPesPacket.Reset()
 	}
 	return nil
-}
+}*/

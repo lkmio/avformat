@@ -1,5 +1,6 @@
 package libmpeg
 
+/*
 import (
 	"bufio"
 	"fmt"
@@ -187,4 +188,4 @@ func NewDeMuxer(handler deHandler) *DeMuxer {
 		currentPesHeader: NewPESPacket(),
 		packet:           utils.NewPacket(),
 	}
-}
+}*/

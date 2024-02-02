@@ -13,6 +13,8 @@ type TSMuxer interface {
 	Input(trackIndex int, data []byte, dts, pts int64) error
 
 	Reset()
+
+	SetAllocateHandler(func(size int) []byte)
 }
 
 func NewTSMuxer() TSMuxer {
@@ -22,9 +24,11 @@ func NewTSMuxer() TSMuxer {
 type tsTrack struct {
 	streamType int
 	pes        *PESHeader
+	tsHeader   *TSHeader
 }
 type tsMuxer struct {
-	tracks []*tsTrack
+	tracks       []*tsTrack
+	allocateFunc func(size int) []byte
 }
 
 func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int, error) {
@@ -39,7 +43,7 @@ func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int
 
 	streamType, ok := codecId2StreamTypeMap[id]
 	if !ok {
-		return -1, fmt.Errorf("the codec %d does not support mux to ts stream", int(id))
+		return -1, fmt.Errorf("the codec %d does not support mux to TS stream", int(id))
 	}
 
 	for _, track := range t.tracks {
@@ -53,14 +57,14 @@ func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int
 func (t *tsMuxer) WriteHeader() {
 	utils.Assert(len(t.tracks) > 0)
 
-	bytes := make([]byte, 1024)
+	bytes := t.allocateFunc(TsPacketSize * 2)
 	n := generatePAT(bytes, 0)
 	utils.Assert(n > 0 && n < TsPacketSize)
 	copy(bytes[n:], stuffing[n:])
 
 	streamTypes := make([][2]int16, len(t.tracks))
 	for index, track := range t.tracks {
-		streamTypes[index][0] = int16(track)
+		streamTypes[index][0] = int16(track.streamType)
 		streamTypes[index][1] = int16(0x100 + index)
 	}
 
@@ -76,7 +80,7 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
 	track.pes.dts = dts
 	track.pes.pts = pts
 
-	bytes := make([]byte, TsPacketSize)
+	bytes := t.allocateFunc(TsPacketSize)
 	n := track.pes.ToBytes(bytes)
 	count := len(data) + n/TsPacketSize
 
@@ -89,4 +93,8 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
 
 func (t *tsMuxer) Reset() {
 
+}
+
+func (t *tsMuxer) SetAllocateHandler(f func(size int) []byte) {
+	t.allocateFunc = f
 }

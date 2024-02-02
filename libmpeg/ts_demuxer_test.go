@@ -1,6 +1,6 @@
 package libmpeg
 
-import (
+/*import (
 	"github.com/yangjiechina/avformat/utils"
 	"io/ioutil"
 	"os"
@@ -45,4 +45,4 @@ func TestTSDeMuxer(t *testing.T) {
 		length -= 188
 	}
 
-}
+}*/

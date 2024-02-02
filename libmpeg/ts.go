@@ -1,5 +1,10 @@
 package libmpeg
 
+import (
+	"github.com/yangjiechina/avformat/utils"
+	"math"
+)
+
 const (
 	PSIPAT = 0x0000
 	PSICAT = 0x0001
@@ -155,40 +160,12 @@ func readCASection(data []byte) int {
 	return 0
 }
 
+// section 2.4.4.3
 func generatePAT(data []byte, counter byte) int {
 	var n int
 	header := TSHeader{0x47, 0, 0, 0, PSIPAT, 0, 0, counter}
 	header.toBytes(data)
 	n += 4
-	//section 2.4.4.3
-	//program_association_section() {
-	//	table_id 8 uimsbf
-	//	section_syntax_indicator 1 bslbf
-	//	'0' 1 bslbf
-	//	reserved 2 bslbf
-	//	section_length 12 uimsbf
-	//	transport_stream_id 16 uimsbf
-	//	reserved 2 bslbf
-	//	version_number 5 uimsbf
-	//	current_next_indicator 1 bslbf
-	//	section_number 8 uimsbf
-	//	last_section_number 8 uimsbf
-	//	for (i = 0; i < N; i++) {
-	//	program_number 16 uimsbf
-	//	reserved 3 bslbf
-	//	if (program_number = = '0') {
-	//	ISO/IEC 13818-1：2007(C)
-	//	44 ITU-T H.222.0建议书 (05/2006)
-	//	表 2-30－节目相关分段
-	//	句 法 比 特 数 助 记 符
-	//	network_PID 13 uimsbf
-	//	}
-	//	else {
-	//	program_map_PID 13 uimsbf
-	//	}
-	//	}
-	//	CRC_32 32 rpchof
-	//}
 	var sectionLength int16
 	var transportStreamId int64
 	//PAT发生变化时，版本号发生变化
@@ -299,5 +276,94 @@ func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
 		n++
 	}
 
+	return n
+}
+
+// section 2.4.3.4
+func generateAdaptationField(data []byte, pcr int64) int {
+	var n int
+	n++
+
+	var discontinuityIndicator byte
+	var randomAccessIndicator byte
+	var elementaryStreamPriorityIndicator byte
+	var PCRFlag byte
+	var OPCRFlag byte
+	var splicingPointFlag byte
+	var transportPrivateDataFlag byte
+	var adaptationFieldExtensionFlag byte
+
+	//var pcr int64
+	var opcr int64
+	var spliceCountdown byte
+	var privateData []byte
+
+	discontinuityIndicator = 0
+	//当前和后续TS包PID可能相同
+	randomAccessIndicator = 1
+	elementaryStreamPriorityIndicator = 0
+	PCRFlag = 1
+	OPCRFlag = 0
+	splicingPointFlag = 0
+	transportPrivateDataFlag = 0
+	adaptationFieldExtensionFlag = 0
+	data[n] = (discontinuityIndicator & 0x1 << 7) | (randomAccessIndicator & 0x1 << 6) | (elementaryStreamPriorityIndicator & 0x1 << 5) | (PCRFlag & 0x1 << 4) | (OPCRFlag & 0x1 << 3) | (splicingPointFlag & 0x1 << 2) | (transportPrivateDataFlag & 0x1 << 1) | (adaptationFieldExtensionFlag & 0x1)
+	n++
+	//MPEG-2标准中, 时钟频率为27MHZ
+	//PES中的DTS和PTS 90KHZ
+	if PCRFlag&0x1 == 1 {
+		//不能超过42位
+		utils.Assert(pcr <= 0x3FFFFFFFFF)
+		//PCR(i)=PCR base(i)x300+ PCR ext(i)
+		//PCR base(i) = ((system clock frequency x t(i))DIV 300) % 233
+		//PCR ext(i) = ((system clock frequency x t(i)) DIV 1) % 300
+		pcrBase := pcr / 300 % int64(math.Pow(2, 33))
+		pcrExtension := pcr % 300
+
+		data[n] = byte(pcrBase >> 25 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 17 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 9 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 1 & 0xFF)
+		n++
+		data[n] = byte(pcrBase&0x1<<7) | byte(pcrExtension>>8&0x1)
+		n++
+		data[n] = byte(pcrExtension & 0xFF)
+		n++
+	}
+
+	if OPCRFlag&0x1 == 1 {
+		pcrBase := opcr / 300 % int64(math.Pow(2, 33))
+		pcrExtension := opcr % 300
+
+		data[n] = byte(pcrBase >> 25 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 17 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 9 & 0xFF)
+		n++
+		data[n] = byte(pcrBase >> 1 & 0xFF)
+		n++
+		data[n] = byte(pcrBase&0x1<<7) | byte(pcrExtension>>8&0x1)
+		n++
+		data[n] = byte(pcrExtension & 0xFF)
+		n++
+	}
+
+	if splicingPointFlag&0x1 == 1 {
+		data[n] = spliceCountdown
+		n++
+	}
+
+	if transportPrivateDataFlag&0x1 == 1 {
+		utils.Assert(len(privateData) > 0)
+
+		data[n] = byte(len(privateData))
+		n++
+		copy(data[n:], privateData)
+		n += len(privateData)
+	}
 	return n
 }

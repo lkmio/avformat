@@ -1,6 +1,6 @@
 package libmpeg
 
-import (
+/*import (
 	"fmt"
 	"github.com/yangjiechina/avformat/utils"
 	"os"
@@ -34,3 +34,4 @@ func TestDecodePS(t *testing.T) {
 		deMuxer.Close()
 	}
 }
+*/
