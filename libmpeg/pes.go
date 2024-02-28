@@ -9,6 +9,9 @@ const (
 	StreamIdAudio          = 0xC0 //110x xxxx
 	StreamIdVideo          = 0xE0 //1110 xxxx
 	StreamIdH624           = 0xE2
+
+	PesExistPtsMark    = 0x2
+	PesExistPtsDtsMark = 0x3
 )
 
 type PESHeader struct {

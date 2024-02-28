@@ -1,18 +1,35 @@
 package libmpeg
 
 import (
+	"encoding/binary"
 	"github.com/yangjiechina/avformat/utils"
 	"math"
 )
 
+// section 2.4.4
 const (
-	PSIPAT = 0x0000
-	PSICAT = 0x0001
-	//PSINIT = 0x0000
-	PSIPMT  = 0x0002
-	PSITSDT = 0x0002
+	PsiPat = 0x0000
+
+	// PsiPmt 在PAT中自定义
+	PsiPmt = 0x1000
+
+	// PsiCat 私有数据
+	PsiCat = 0x0001 //私有数据
+	// PsiTSdt 描述流
+	PsiTSdt = 0x0002
+
+	// PsiNit 网络信息
+	PsiNit = 0x0000
+
+	TableIdPAS = 0x00
+
+	TableIdCAS = 0x01
+
+	TableIdPMS = 0x2
 
 	TsPacketSize = 188
+
+	TsPacketStartPid = 0x100
 )
 
 var stuffing [188]byte
@@ -26,19 +43,57 @@ func init() {
 type TSHeader struct {
 	syncByte                   byte //1byte fixed 0x47
 	transportErrorIndicator    byte //1bit
-	payloadUnitStartIndicator  byte //1bit
+	payloadUnitStartIndicator  byte //1bit //1-PSI(PAT/PMT/...)和PES开始包
 	transportPriority          byte //1bit
 	pid                        int  //13bits //0x0000-PAT/0x001-CAT/0x002-TSDT/0x0004-0x000F reserved/0x1FFF null packet
-	transportScramblingControl byte //2bits
-	adaptationFieldControl     byte //2bits 10/11/01/11
+	transportScramblingControl byte //2bits 加密使用
+	adaptationFieldControl     byte //2bits 10-全是自适应字段数据 11-自适应字段后跟随负载数据 01-全是负载数据
 	continuityCounter          byte //4bits
 }
 
+func NewTSHeader(pid int, start, counter byte) TSHeader {
+	return TSHeader{
+		syncByte:                   0x47,
+		transportErrorIndicator:    0x0,
+		payloadUnitStartIndicator:  start,
+		transportPriority:          0x0,
+		pid:                        pid,
+		transportScramblingControl: 0,
+		adaptationFieldControl:     0x01,
+		continuityCounter:          counter,
+	}
+}
+
+// section 2.4.3.2
 func (h *TSHeader) toBytes(dst []byte) {
 	dst[0] = 0x47
 	dst[1] = (h.transportErrorIndicator & 0x1 << 7) | (h.payloadUnitStartIndicator & 0x1 << 6) | (h.transportPriority & 0x1 << 5) | byte(h.pid>>8&0x1F)
 	dst[2] = byte(h.pid)
 	dst[3] = (h.transportScramblingControl & 0x3 << 6) | (h.adaptationFieldControl & 0x3 << 4) | (h.continuityCounter & 0xF)
+
+	//重置为没有自适应数据
+	h.adaptationFieldControl = 0x1
+}
+
+func (h *TSHeader) increaseCounter() {
+	h.continuityCounter = (h.continuityCounter + 1) % 16
+}
+
+func (h *TSHeader) writePCR(data []byte, pcr int64) int {
+	h.adaptationFieldControl = 0x3
+
+	n := writeAdaptationField(data[1:], pcr)
+	data[0] = byte(n)
+	return 1 + n
+}
+
+// PES数据不足以填满整个TS包时，填充FF
+func (h *TSHeader) fill(data []byte, count int, adaptation bool) int {
+	h.adaptationFieldControl = 0x3
+	data[0] = byte(1 + count)
+	data[1] = 0x0
+	copy(data[2:], stuffing[:count])
+	return 2 + count
 }
 
 func readTSHeader(data []byte) (TSHeader, int) {
@@ -161,11 +216,12 @@ func readCASection(data []byte) int {
 }
 
 // section 2.4.4.3
-func generatePAT(data []byte, counter byte) int {
+func writePAT(data []byte, counter byte) int {
 	var n int
-	header := TSHeader{0x47, 0, 0, 0, PSIPAT, 0, 0, counter}
+	header := NewTSHeader(PsiPat, 1, counter)
 	header.toBytes(data)
 	n += 4
+	//高2位必须为0
 	var sectionLength int16
 	var transportStreamId int64
 	//PAT发生变化时，版本号发生变化
@@ -177,11 +233,14 @@ func generatePAT(data []byte, counter byte) int {
 	var sectionNumber byte
 	var lastSectionNumber byte
 
-	sectionLength = 8
+	currentNextIndicator = 1
+	sectionLength = 13
 
 	data[n] = 0x00
 	n++
-	data[n] = 0x80 | (byte(sectionLength>>8) & 0x3)
+	data[n] = TableIdPAS
+	n++
+	data[n] = 0x80 | (byte(sectionLength>>8) & 0x03)
 	n++
 	data[n] = byte(sectionLength)
 	n++
@@ -202,32 +261,46 @@ func generatePAT(data []byte, counter byte) int {
 	data[n] = 0x1
 	n++
 
-	data[n] = PSIPMT >> 8 & 0x10
+	data[n] = PsiPmt >> 8 & 0x10
 	n++
-	data[n] = PSIPMT & 0xFFFF
+	data[n] = PsiPmt & 0xFF
 	n++
 
+	//crc32
+	crc32 := utils.CalculateCrcMpeg2(data[5:n])
+	binary.BigEndian.PutUint32(data[n:], crc32)
+	n += 4
 	return n
 }
 
-func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
-	header := TSHeader{0x47, 0, 0, 0, PSIPMT, 0, 0, counter}
+func writePMT(data []byte, counter byte, programNumber_, pcrPid_ int, streamTypes [][2]int16) int {
+	header := NewTSHeader(PsiPmt, 1, counter)
 	header.toBytes(data)
 	var n int
 	n += 4
 	//section 2.4.4.8
 	var sectionLength int16
+	//整个ts流中作为关联PMT的序号
 	var programNumber int16
 	var versionNumber byte
 	var currentNextIndicator byte
+	//必须为0
 	var sectionNumber byte
+	//必须为0
 	var lastSectionNumber byte
+	//programNumber指向包含PCR的TS包的PID
 	var pcrPid int16
 	var infoLength int16
 
-	data[n] = PSIPMT
+	currentNextIndicator = 1
+	programNumber = int16(programNumber_)
+	pcrPid = int16(pcrPid_)
+
+	data[n] = 0x00
 	n++
-	data[n] = (1 << 7) | byte(sectionLength>>8&0x3)
+	data[n] = TableIdPMS
+	n++
+	data[n] = (1 << 7) | byte(sectionLength>>8&0x03)
 	n++
 	data[n] = byte(sectionLength)
 	n++
@@ -244,9 +317,9 @@ func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
 	n++
 	data[n] = lastSectionNumber
 	n++
-	data[n] = byte(pcrPid & 0x10)
+	data[n] = byte(pcrPid >> 8 & 0x1F)
 	n++
-	data[n] = byte(pcrPid)
+	data[n] = byte(pcrPid & 0xFF)
 	n++
 
 	data[n] = byte(infoLength >> 8 & 0x3)
@@ -265,9 +338,9 @@ func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
 		n++
 		//elementary_PID
 		//负载PES的TS包的PID
-		data[n] = byte(streamType[1] & 0x10)
+		data[n] = byte(streamType[1] >> 8 & 0x1F)
 		n++
-		data[n] = byte(streamType[1])
+		data[n] = byte(streamType[1] & 0xFF)
 		n++
 
 		data[n] = 0x0
@@ -276,13 +349,19 @@ func generatePMT(data []byte, counter byte, streamTypes [][2]int16) int {
 		n++
 	}
 
+	//sectionLength
+	data[6] = (1 << 7) | byte((n-4)>>8&0x03)
+	data[7] = byte(n - 4)
+
+	crc32 := utils.CalculateCrcMpeg2(data[5:n])
+	binary.BigEndian.PutUint32(data[n:], crc32)
+	n += 4
 	return n
 }
 
 // section 2.4.3.4
-func generateAdaptationField(data []byte, pcr int64) int {
+func writeAdaptationField(data []byte, pcr int64) int {
 	var n int
-	n++
 
 	var discontinuityIndicator byte
 	var randomAccessIndicator byte
@@ -365,5 +444,28 @@ func generateAdaptationField(data []byte, pcr int64) int {
 		copy(data[n:], privateData)
 		n += len(privateData)
 	}
+
 	return n
+}
+
+func writeAud(data []byte, id utils.AVCodecID) int {
+	binary.BigEndian.PutUint32(data, 0x1)
+	if utils.AVCodecIdH264 == id {
+		data[4] = 0x09
+		data[5] = 0xF0
+		return 6
+	} else if utils.AVCodecIdH265 == id {
+		data[4] = 0x46
+		data[5] = 0x01
+		data[6] = 0x50
+		return 7
+	} else if utils.AVCodecIdH265 == id {
+		data[4] = 0x00
+		data[5] = 0xA1
+		data[6] = 0x28
+		return 7
+	}
+
+	utils.Assert(false)
+	return -1
 }

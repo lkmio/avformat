@@ -37,7 +37,7 @@ func (t *TSDeMuxer) existPES(id int) bool {
 
 func (t *TSDeMuxer) doRead(data []byte) error {
 	h, i := readTSHeader(data)
-	if h.pid == PSIPAT {
+	if h.pid == PsiPat {
 		pmt := readPAT(data[i:])
 		for _, id := range pmt {
 			if !t.existPMT(id) {
