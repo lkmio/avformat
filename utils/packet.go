@@ -31,10 +31,15 @@ type AVPacket interface {
 }
 
 type avPacket struct {
-	data []byte
-	dts  int64
-	pts  int64
-	key  bool
+	data           []byte
+	dataAVCC       []byte
+	dataAVCCSize   int
+	dataAnnexB     []byte
+	dataAnnexBSize int
+
+	dts int64
+	pts int64
+	key bool
 
 	//打包模式
 	packetType PacketType
@@ -84,8 +89,20 @@ func (pkt *avPacket) CodecId() AVCodecID {
 
 func (pkt *avPacket) AnnexBPacketData() []byte {
 	Assert(AVMediaTypeVideo == pkt.mediaType)
-	Assert(false)
-	return nil
+	if PacketTypeAnnexB == pkt.packetType {
+		return pkt.data
+	}
+
+	if pkt.dataAnnexB != nil {
+		return pkt.dataAnnexB[:pkt.dataAnnexBSize]
+	}
+
+	bytes := make([]byte, len(pkt.data)+64)
+	n := AVCC2AnnexB(bytes, pkt.data, nil)
+	pkt.dataAnnexB = bytes
+	pkt.dataAnnexBSize = n
+
+	return pkt.dataAnnexB[:pkt.dataAnnexBSize]
 }
 
 func (pkt *avPacket) AVCCPacketData() []byte {
@@ -95,8 +112,16 @@ func (pkt *avPacket) AVCCPacketData() []byte {
 		return pkt.data
 	}
 
-	Assert(false)
-	return nil
+	if pkt.dataAVCC != nil {
+		return pkt.dataAVCC[:pkt.dataAVCCSize]
+	}
+
+	bytes := make([]byte, len(pkt.data)+64)
+	n := AnnexB2AVCC(bytes, pkt.data)
+	pkt.dataAVCC = bytes
+	pkt.dataAVCCSize = n
+
+	return pkt.dataAVCC[:pkt.dataAVCCSize]
 }
 
 func (pkt *avPacket) Index() int {

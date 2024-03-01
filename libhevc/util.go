@@ -2,7 +2,6 @@ package libhevc
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -20,7 +19,7 @@ func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
 		}
 		for j := 0; j < count; j++ {
 			nalUnitLen := int(buffer.ReadUInt16())
-			dstBuffer.Write(libavc.StartCode4)
+			dstBuffer.Write(utils.StartCode4)
 			offset := buffer.ReadOffset()
 			dstBuffer.Write(src[offset : offset+nalUnitLen])
 			buffer.Skip(nalUnitLen)
@@ -67,7 +66,7 @@ func Mp4ToAnnexB(dst utils.ByteBuffer, data, extra []byte, lengthSize int) error
 			dst.Write(extra)
 		}
 
-		dst.Write(libavc.StartCode4)
+		dst.Write(utils.StartCode4)
 		dst.Write(data[index : index+nalUnitSize])
 		index += nalUnitSize
 	}

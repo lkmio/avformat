@@ -2,7 +2,6 @@ package libmp4
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
 	"github.com/yangjiechina/avformat/libhevc"
 	"github.com/yangjiechina/avformat/utils"
 )
@@ -347,7 +346,7 @@ func parseSTSDVideo(t *Track, size uint32, buffer utils.ByteBuffer) error {
 			extra := make([]byte, bytes-8)
 			buffer.ReadBytes(extra)
 			if t.metaData.CodeId() == utils.AVCodecIdH264 {
-				spspps, _ := libavc.ExtraDataToAnnexB(extra)
+				spspps, _ := utils.M4VCExtraDataToAnnexB(extra)
 				t.metaData.setExtraData(spspps)
 			} else if t.metaData.CodeId() == utils.AVCodecIdHEVC {
 				b, l, err := libhevc.ExtraDataToAnnexB(extra)

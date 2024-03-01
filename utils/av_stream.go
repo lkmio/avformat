@@ -19,13 +19,13 @@ type AVStream interface {
 
 	SetExtraData(data []byte)
 
-	M4VCExtraData() []byte
+	M4VCExtraData() ([]byte, error)
 
-	AnnexBExtraData() []byte
+	AnnexBExtraData() ([]byte, error)
 }
 
 func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, extraType ExtraType) AVStream {
-	stream := &avStream{type_: type_, index: index, codecId: codecId, extra: extra, extraType: extraType}
+	stream := &avStream{type_: type_, index: index, codecId: codecId, data: extra, extraType: extraType}
 	return stream
 }
 
@@ -36,13 +36,15 @@ type avStream struct {
 
 	codecId AVCodecID
 
-	extra []byte
+	data []byte
+
+	extraAnnexB     []byte
+	extraAnnexBSize int
+
+	extraM4CV     []byte
+	extraM4CVSize int
 
 	extraType ExtraType
-
-	extraAnnexB ByteBuffer
-
-	extraM4CV ByteBuffer
 }
 
 func (a *avStream) Index() int {
@@ -58,20 +60,34 @@ func (a *avStream) CodecId() AVCodecID {
 }
 
 func (a *avStream) Extra() []byte {
-	return a.extra
+	return a.data
 }
 
 func (a *avStream) SetExtraData(data []byte) {
-	a.extra = data
+	a.data = data
 }
 
-func (a *avStream) M4VCExtraData() []byte {
+func (a *avStream) M4VCExtraData() ([]byte, error) {
 	//ast.TypeAssertExpr{}
 
-	return nil
+	return nil, nil
 }
 
-func (a *avStream) AnnexBExtraData() []byte {
+func (a *avStream) AnnexBExtraData() ([]byte, error) {
+	if ExtraTypeAnnexB == a.extraType {
+		return a.data, nil
+	}
+	if a.extraAnnexB != nil {
+		return a.extraAnnexB[:a.extraAnnexBSize], nil
+	}
 
-	return nil
+	b, err := M4VCExtraDataToAnnexB(a.data)
+	if err != nil {
+		return nil, err
+	}
+
+	a.extraAnnexB = b
+	a.extraAnnexBSize = len(b)
+
+	return a.extraAnnexB[:a.extraAnnexBSize], nil
 }
