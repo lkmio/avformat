@@ -13,12 +13,12 @@ import (
  * PAT->PMT->DATA...PAT->PMT->DATA
  */
 type TSMuxer interface {
-	AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int, error)
+	AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID, extra []byte) (int, error)
 
 	// WriteHeader 写入PAT和PMT /**
-	WriteHeader()
+	WriteHeader() error
 
-	Input(trackIndex int, data []byte, dts, pts int64) error
+	Input(trackIndex int, data []byte, pts, dts int64, key bool) error
 
 	// Reset 清空tracks, 可重新AddTrack和WriteHeader /**
 	Reset()
@@ -26,29 +26,41 @@ type TSMuxer interface {
 	SetAllocHandler(func(size int) []byte)
 
 	SetWriteHandler(func(data []byte))
+
+	TrackCount() int
+
+	Duration() int64
 }
 
 func NewTSMuxer() TSMuxer {
-	return &tsMuxer{}
+	return &tsMuxer{
+		startTS: -1,
+		endTS:   -1,
+	}
 }
 
 type tsTrack struct {
-	streamType int
-	pes        *PESHeader
-	buffer     []byte
-	tsHeader   *TSHeader
-	mediaType  utils.AVMediaType
-	avCodecId  utils.AVCodecID
+	streamType       int
+	pes              *PESHeader
+	buffer           []byte
+	tsHeader         *TSHeader
+	mediaType        utils.AVMediaType
+	codecId          utils.AVCodecID
+	extra            []byte
+	extraConfig      interface{}
+	extraWriteBuffer []byte
 }
 
 type tsMuxer struct {
-	tracks []*tsTrack
+	tracks  []*tsTrack
+	startTS int64
+	endTS   int64
 
 	allocHandler func(size int) []byte
 	writeHandler func([]byte)
 }
 
-func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int, error) {
+func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID, extra []byte) (int, error) {
 	var pes *PESHeader
 	if utils.AVMediaTypeAudio == mediaType {
 		pes = NewPESPacket(StreamIdAudio)
@@ -68,12 +80,28 @@ func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID) (int
 	}
 
 	tsHeader := NewTSHeader(TsPacketStartPid+len(t.tracks), 1, 0)
-	t.tracks = append(t.tracks, &tsTrack{streamType: streamType, pes: pes, buffer: make([]byte, 128), tsHeader: &tsHeader,
-		mediaType: mediaType, avCodecId: id})
+	track := &tsTrack{streamType: streamType, pes: pes, buffer: make([]byte, 128), tsHeader: &tsHeader,
+		mediaType: mediaType, codecId: id}
+	t.tracks = append(t.tracks, track)
+
+	if extra != nil {
+		if utils.AVCodecIdAAC == id {
+			record, err := utils.ParseMpeg4AudioConfig(extra)
+			if err != nil {
+				return 0, err
+			}
+			track.extraConfig = record
+			//adts header
+			track.extraWriteBuffer = make([]byte, 7)
+		} else if utils.AVCodecIdH264 == id {
+			track.extra = extra
+		}
+	}
+
 	return len(t.tracks) - 1, nil
 }
 
-func (t *tsMuxer) WriteHeader() {
+func (t *tsMuxer) WriteHeader() error {
 	utils.Assert(len(t.tracks) > 0)
 
 	//写PAT
@@ -94,10 +122,14 @@ func (t *tsMuxer) WriteHeader() {
 	copy(bytes[TsPacketSize+n:], stuffing[:TsPacketSize-n])
 
 	t.writeHandler(bytes)
+	return nil
 }
 
-func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
-	track := t.tracks[trackIndex]
+func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
+	size := 0
+	for _, bytes := range data {
+		size += len(bytes)
+	}
 
 	//不固定PES包长
 	track.pes.packetLength = 0x0000
@@ -107,7 +139,7 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
 
 	//给音视频帧加上pes头, 再分割成多个TS包
 	pesHeaderLen := track.pes.ToBytes(track.buffer)
-	pesLen := len(data) + pesHeaderLen
+	pesLen := size + pesHeaderLen
 
 	for remain := pesLen; remain > 0; {
 		bytes := t.allocHandler(TsPacketSize)
@@ -148,12 +180,27 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
 			//传入的nalu不要携带aud
 			if utils.AVMediaTypeVideo == track.mediaType {
 				utils.Assert(pktSize > 6)
-				pktSize -= writeAud(bytes[TsPacketSize-pktSize:], track.avCodecId)
+				pktSize -= writeAud(bytes[TsPacketSize-pktSize:], track.codecId)
 			}
 		}
 
-		copy(bytes[TsPacketSize-pktSize:], data[pesLen-remain:pesLen-remain+pktSize])
-		remain -= pktSize
+		index := pesLen - remain
+		for _, pkt := range data {
+			if pktSize == 0 {
+				break
+			}
+
+			if index < len(pkt) {
+				remainCount := len(pkt[index:])
+				minInt := utils.MinInt(remainCount, pktSize)
+				copy(bytes[TsPacketSize-pktSize:], pkt[index:index+minInt])
+				remain -= minInt
+				pktSize -= minInt
+			} else {
+				index -= len(pkt)
+			}
+		}
+
 		track.tsHeader.toBytes(bytes[:])
 		t.writeHandler(bytes[:TsPacketSize])
 		track.tsHeader.increaseCounter()
@@ -162,8 +209,32 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, dts, pts int64) error {
 	return nil
 }
 
-func (t *tsMuxer) Reset() {
+func (t *tsMuxer) Input(trackIndex int, data []byte, pts, dts int64, key bool) error {
+	if t.startTS == -1 {
+		t.startTS = pts
+	}
+	t.endTS = pts
 
+	track := t.tracks[trackIndex]
+	if track.codecId == utils.AVCodecIdAAC && track.extraConfig != nil {
+		audioConfig := track.extraConfig.(*utils.MPEG4AudioConfig)
+		utils.SetADtsHeader(track.extraWriteBuffer, 0, audioConfig.ObjectType-1, audioConfig.SamplingIndex, audioConfig.ChanConfig, 7+len(data))
+		return t.write(track, pts, dts, track.extraWriteBuffer, data)
+	} else if utils.AVCodecIdH264 == track.codecId && key && track.extra != nil {
+		return t.write(track, pts, dts, track.extra, data)
+	}
+
+	return t.write(track, pts, dts, data)
+}
+
+func (t *tsMuxer) Reset() {
+	t.startTS = -1
+	t.endTS = t.startTS
+
+	for _, track := range t.tracks {
+		track.tsHeader.payloadUnitStartIndicator = 1
+		track.tsHeader.continuityCounter = 0
+	}
 }
 
 func (t *tsMuxer) SetAllocHandler(f func(size int) []byte) {
@@ -172,4 +243,12 @@ func (t *tsMuxer) SetAllocHandler(f func(size int) []byte) {
 
 func (t *tsMuxer) SetWriteHandler(f func(data []byte)) {
 	t.writeHandler = f
+}
+
+func (t *tsMuxer) TrackCount() int {
+	return len(t.tracks)
+}
+
+func (t *tsMuxer) Duration() int64 {
+	return t.endTS - t.startTS
 }

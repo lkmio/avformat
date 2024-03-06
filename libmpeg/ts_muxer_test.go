@@ -42,7 +42,7 @@ func TestTSMuxer(t *testing.T) {
 		bufferSize += len(data)
 	})
 
-	videoTrackIndex, err := muxer.AddTrack(utils.AVMediaTypeVideo, utils.AVCodecIdH264)
+	videoTrackIndex, err := muxer.AddTrack(utils.AVMediaTypeVideo, utils.AVCodecIdH264, nil)
 	utils.Assert(err == nil)
 
 	muxer.WriteHeader()
@@ -67,7 +67,7 @@ func TestTSMuxer(t *testing.T) {
 		pkt := file[start : i-mark]
 		start = i - mark
 
-		muxer.Input(videoTrackIndex, pkt, pts, pts)
+		muxer.Input(videoTrackIndex, pkt, pts, pts, false)
 		pts += 3600
 		mark = 0
 	}
