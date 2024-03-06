@@ -368,9 +368,8 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				}
 			}
 
-			stream := s.app + "/" + s.stream
 			state := make(chan utils.HookState, 1)
-			s.handler.OnPublish(s.app, stream, state)
+			s.handler.OnPublish(s.app, s.stream, state)
 
 			//在未收到响应之前，拒绝接受任何消息
 			select {
@@ -391,9 +390,8 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				}
 			}
 
-			stream := s.app + "/" + s.stream
 			state := make(chan utils.HookState, 1)
-			s.handler.OnPlay(s.app, stream, state)
+			s.handler.OnPlay(s.app, s.stream, state)
 
 			//在未收到响应之前，拒绝接受任何消息
 			select {
