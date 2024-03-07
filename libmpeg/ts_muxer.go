@@ -213,7 +213,13 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, pts, dts int64, key bool) e
 	if t.startTS == -1 {
 		t.startTS = pts
 	}
-	t.endTS = pts
+
+	if pts < t.startTS {
+		t.endTS = t.startTS
+		t.startTS = pts
+	} else {
+		t.endTS = pts
+	}
 
 	track := t.tracks[trackIndex]
 	if track.codecId == utils.AVCodecIdAAC && track.extraConfig != nil {
