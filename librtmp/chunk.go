@@ -203,6 +203,35 @@ func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
 	return n
 }
 
+func (h *Chunk) WriteData(dst, data []byte, chunkSize int) int {
+	length := len(data)
+	first := true
+	var n int
+	for length > 0 {
+		var min int
+		if first {
+			min = utils.MinInt(length, chunkSize-5)
+			first = false
+		} else {
+			min = utils.MinInt(length, chunkSize)
+		}
+
+		copy(dst[n:], data[:min])
+		n += min
+
+		length -= min
+		data = data[min:]
+
+		//写一个ChunkType3用作分割
+		if length > 0 {
+			dst[n] = (0x3 << 6) | byte(h.csid)
+			n++
+		}
+	}
+
+	return n
+}
+
 func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
 	t := ChunkType(src[0] >> 6)
 	if t > 0x3 {
