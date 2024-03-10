@@ -69,6 +69,11 @@ func (a *avStream) SetExtraData(data []byte) {
 
 func (a *avStream) M4VCExtraData() ([]byte, error) {
 	//ast.TypeAssertExpr{}
+	Assert(AVMediaTypeVideo == a.type_)
+
+	if ExtraTypeM4VC == a.extraType {
+		return a.data, nil
+	}
 
 	return nil, nil
 }
