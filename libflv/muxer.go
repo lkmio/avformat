@@ -5,7 +5,7 @@ import (
 	"github.com/yangjiechina/avformat/utils"
 )
 
-type Muxer struct {
+type muxer struct {
 	existAudio bool
 	existVideo bool
 
@@ -17,35 +17,52 @@ type Muxer struct {
 	preSize      uint32
 }
 
-func NewMuxer(audioCodecId, videoCodecId utils.AVCodecID, soundRate, soundType, soundSize int) *Muxer {
-	m := &Muxer{
-		existAudio: utils.AVCodecIdNONE != audioCodecId,
-		existVideo: utils.AVCodecIdNONE != videoCodecId,
-		soundSize:  1,
-	}
+type Muxer interface {
+	AddVideoTrack(id utils.AVCodecID)
 
-	if m.existAudio {
-		if utils.AVCodecIdAAC == audioCodecId {
-			m.soundFormat = SoundFormatAAC
-			m.soundRate = SoundRate44000HZ
-			m.soundType = 1
-		} else {
-			utils.Assert(false)
-		}
-	}
+	AddAudioTrack(id utils.AVCodecID, soundRate, soundType, soundSize int)
 
-	if m.existVideo {
-		if utils.AVCodecIdH264 == videoCodecId {
-			m.videoCodecId = VideoCodeIdH264
-		} else {
-			utils.Assert(false)
-		}
-	}
+	WriteHeader(data []byte) int
 
+	Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts, pts int64, key, header_ bool) int
+
+	WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, timestamp uint32) int
+
+	WriteAudioData(dst []byte, header bool) int
+
+	WriteVideoData(dst []byte, ct uint32, key, header bool) int
+}
+
+func NewMuxer() Muxer {
+	m := &muxer{
+		soundSize: 1,
+	}
 	return m
 }
 
-func (m *Muxer) WriteHeader(data []byte) int {
+func (m *muxer) AddVideoTrack(id utils.AVCodecID) {
+	if utils.AVCodecIdH264 == id {
+		m.videoCodecId = VideoCodeIdH264
+	} else {
+		utils.Assert(false)
+	}
+
+	m.existVideo = true
+}
+
+func (m *muxer) AddAudioTrack(id utils.AVCodecID, soundRate, soundType, soundSize int) {
+	if utils.AVCodecIdAAC == id {
+		m.soundFormat = SoundFormatAAC
+		m.soundRate = SoundRate44000HZ
+		m.soundType = 1
+	} else {
+		utils.Assert(false)
+	}
+
+	m.existAudio = true
+}
+
+func (m *muxer) WriteHeader(data []byte) int {
 	//signature
 	data[0] = 0x46
 	data[1] = 0x4C
@@ -67,7 +84,7 @@ func (m *Muxer) WriteHeader(data []byte) int {
 	return 9
 }
 
-func (m *Muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts, pts int64, key, header_ bool) int {
+func (m *muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts, pts int64, key, header_ bool) int {
 	if utils.AVMediaTypeAudio == mediaType {
 		_ = dst[16]
 		n := m.WriteTag(dst, mediaType, uint32(pktSize+2), uint32(dts))
@@ -83,7 +100,7 @@ func (m *Muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts,
 	panic("")
 }
 
-func (m *Muxer) WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, timestamp uint32) int {
+func (m *muxer) WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, timestamp uint32) int {
 	binary.BigEndian.PutUint32(dst, m.preSize)
 
 	if utils.AVMediaTypeAudio == mediaType {
@@ -101,7 +118,7 @@ func (m *Muxer) WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, time
 	return 15
 }
 
-func (m *Muxer) WriteAudioData(dst []byte, header bool) int {
+func (m *muxer) WriteAudioData(dst []byte, header bool) int {
 	_ = dst[1]
 	dst[0] = byte(m.soundFormat)<<4 | byte(m.soundRate)<<2 | m.soundSize<<1 | m.soundType
 	if header {
@@ -113,7 +130,7 @@ func (m *Muxer) WriteAudioData(dst []byte, header bool) int {
 	return 2
 }
 
-func (m *Muxer) WriteVideoData(dst []byte, ct uint32, key, header bool) int {
+func (m *muxer) WriteVideoData(dst []byte, ct uint32, key, header bool) int {
 	_ = dst[4]
 	var frameType byte
 	if header || key {
