@@ -2,52 +2,19 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"syscall"
 	"time"
 )
 
-const (
-	DefaultTCPRecvBufferSize = 4096
-)
-
-// Handler 传输事件处理器，负责连接传输和断开连接的回调
-type Handler interface {
-	OnConnected(conn net.Conn)
-
-	OnPacket(conn net.Conn, data []byte)
-
-	OnDisConnected(conn net.Conn, err error)
-}
-
-type ITransport interface {
-	Bind(addr string) error
-
-	Close()
-
-	SetHandler(handler Handler)
-}
-
-type transportImpl struct {
-	handler Handler
-
-	ctx    context.Context
-	cancel context.CancelFunc
-}
-
-func (impl *transportImpl) SetHandler(handler Handler) {
-	impl.handler = handler
-}
-
-func (impl *transportImpl) Close() {
-	impl.cancel()
-}
-
 type TCPServer struct {
 	transportImpl
 }
 
-func (t *TCPServer) Bind(addr string) error {
+func (t *TCPServer) Bind(addr net.Addr) error {
+	utils.Assert(t.handler != nil)
+
 	config := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
@@ -60,7 +27,7 @@ func (t *TCPServer) Bind(addr string) error {
 
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 
-	if listen, err := config.Listen(t.ctx, "tcp", addr); err != nil {
+	if listen, err := config.Listen(t.ctx, "tcp", addr.String()); err != nil {
 		return err
 	} else {
 		time.Sleep(100 * time.Millisecond)

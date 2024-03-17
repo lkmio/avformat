@@ -7,9 +7,10 @@ var (
 	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
-func FindStartCode(p []byte, offset int) int {
+// FindStartCode 返回的是NalUHeader的位置
+func FindStartCode(p []byte) int {
 	length := len(p)
-	i := offset + 2
+	i := 2
 
 	for i < length {
 		if p[i] > 1 {
@@ -28,6 +29,24 @@ func FindStartCode(p []byte, offset int) int {
 		return i
 	} else {
 		return -1
+	}
+}
+
+// FindStartCode2 返回的是start code的起始位置
+func FindStartCode2(p []byte) int {
+	index := FindStartCode(p)
+	if index < 0 {
+		return index
+	}
+
+	index -= 4
+
+	if index < 0 {
+		return 0
+	} else if p[index] == 0 {
+		return index
+	} else {
+		return index + 1
 	}
 }
 
@@ -58,7 +77,7 @@ func FindStartCodeFromBuffer(buffer ByteBuffer, offset int) int {
 func IsKeyFrame(p []byte) bool {
 	index := 0
 	for {
-		index = FindStartCode(p, index)
+		index = FindStartCode(p[index:])
 		if index < 0 {
 			return false
 		}
@@ -107,7 +126,7 @@ func IsKeyFrameFromBuffer(buffer ByteBuffer) bool {
 
 func ParseNalUnits(p []byte) int {
 	for {
-		index := FindStartCode(p, 0)
+		index := FindStartCode(p)
 		state := p[index]
 		switch state & 0x1F {
 		case H264NalSlice:
@@ -204,9 +223,9 @@ func AVCC2AnnexB(dst []byte, avcc []byte, extra []byte) int {
 				outSize += copyNalUWithBytes(dst[outSize:], extra, outSize, false)
 			}
 			break
-			//case H264NalSEI:
-			//	index += size
-			//	continue
+		case H264NalSEI:
+			index += size
+			continue
 		}
 
 		bytes := avcc[index : index+size]
@@ -220,7 +239,7 @@ func AVCC2AnnexB(dst []byte, avcc []byte, extra []byte) int {
 func AnnexB2AVCC(dst []byte, annexB []byte) int {
 	length := len(annexB)
 	size := 0
-	nalStart := FindStartCode(annexB, 0)
+	nalStart := FindStartCode(annexB)
 	if nalStart < 0 {
 		return 0
 	}
@@ -233,7 +252,7 @@ func AnnexB2AVCC(dst []byte, annexB []byte) int {
 			return size
 		}
 
-		nalEnd := FindStartCode(annexB, nalStart)
+		nalEnd := FindStartCode(annexB[nalStart:])
 		if nalEnd < 0 {
 			return size
 		}
@@ -310,6 +329,28 @@ func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
 	}
 
 	return dstBuffer.ToBytes(), nil
+}
+
+func SplitNalU(data []byte, cb func(nalu []byte)) {
+	var offset int
+	for n := FindStartCode2(data[offset+3:]); n > -1; n = FindStartCode2(data[offset+3:]) {
+		n += 3
+		cb(data[offset:n])
+		offset = n
+	}
+
+	cb(data[offset:])
+}
+
+func RemoveStartCode(data []byte) []byte {
+	Assert(data[0] == 0x0 && data[1] == 0x0)
+
+	if data[2] == 0x1 {
+		return data[3:]
+	}
+
+	Assert(data[2] == 0x0 && data[3] == 0x1)
+	return data[4:]
 }
 
 /*aligned(8) class AVCDecoderConfigurationRecord {

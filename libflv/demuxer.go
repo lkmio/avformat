@@ -255,7 +255,7 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 		}
 
 		d.videoTs += int64(ts)
-		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex)
+		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex, 1000)
 		d.Handler.OnDeMuxPacket(packet)
 	}
 
@@ -292,7 +292,7 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 		}
 
 		d.audioTs += int64(ts)
-		packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex)
+		packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex, 1000)
 		d.Handler.OnDeMuxPacket(packet)
 	}
 

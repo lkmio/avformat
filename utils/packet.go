@@ -28,6 +28,10 @@ type AVPacket interface {
 	AVCCPacketData() []byte
 
 	Index() int
+
+	ConvertPts(dst int) int64
+
+	ConvertDts(dst int) int64
 }
 
 type avPacket struct {
@@ -49,22 +53,34 @@ type avPacket struct {
 	codecId AVCodecID
 
 	index int
+
+	timebase int
 }
 
-func NewAudioPacket(data []byte, dts, pts int64, id AVCodecID, index int) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: true, mediaType: AVMediaTypeAudio, codecId: id, index: index}
+func NewAudioPacket(data []byte, dts, pts int64, id AVCodecID, index int, timebase int) AVPacket {
+	return &avPacket{data: data, dts: dts, pts: pts, key: true, mediaType: AVMediaTypeAudio, codecId: id, index: index, timebase: timebase}
 }
 
-func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType, id AVCodecID, index int) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index}
+func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType, id AVCodecID, index int, timebase int) AVPacket {
+	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index, timebase: timebase}
 }
 
 func (pkt *avPacket) Dts() int64 {
 	return pkt.dts
 }
 
+func (pkt *avPacket) ConvertDts(dst int) int64 {
+	interval := float64(dst) / float64(pkt.timebase)
+	return int64(float64(pkt.dts) * interval)
+}
+
 func (pkt *avPacket) Pts() int64 {
 	return pkt.pts
+}
+
+func (pkt *avPacket) ConvertPts(dst int) int64 {
+	interval := float64(dst) / float64(pkt.timebase)
+	return int64(float64(pkt.pts) * interval)
 }
 
 func (pkt *avPacket) MediaType() AVMediaType {

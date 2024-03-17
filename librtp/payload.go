@@ -101,20 +101,21 @@ import "github.com/yangjiechina/avformat/utils"
 //dyn     H263-1998   V           90,000
 
 var (
-	payloadTypes map[int]payloadType
+	payloadTypes    map[int]PayloadType
+	CodecIdPayloads map[utils.AVCodecID]PayloadType
 )
 
-type payloadType struct {
-	pt        int
-	encoding  string
-	mediaType utils.AVMediaType
-	codeId    utils.AVCodecID
-	clockRate int
-	channels  int
+type PayloadType struct {
+	Pt        int
+	Encoding  string
+	MediaType utils.AVMediaType
+	CodeId    utils.AVCodecID
+	ClockRate int
+	Channels  int
 }
 
 func init() {
-	payloadTypes = map[int]payloadType{
+	payloadTypes = map[int]PayloadType{
 		0:  {0, "PCMU", utils.AVMediaTypeAudio, utils.AVCodecIdPCMMULAW, 8000, 1},
 		3:  {3, "GSM", utils.AVMediaTypeAudio, utils.AVCodecIdNONE, 8000, 1},
 		4:  {4, "G723", utils.AVMediaTypeAudio, utils.AVCodecIdG7231, 8000, 1},
@@ -143,6 +144,15 @@ func init() {
 		34: {34, "H263", utils.AVMediaTypeVideo, utils.AVCodecIdH263, 90000, -1},
 
 		96: {96, "", utils.AVMediaTypeVideo, utils.AVCodecIdNONE, 90000, -1},
+	}
+
+	CodecIdPayloads = map[utils.AVCodecID]PayloadType{
+		utils.AVCodecIdPCMMULAW: {0, "PCMU", utils.AVMediaTypeAudio, utils.AVCodecIdPCMMULAW, 8000, 1},
+		utils.AVCodecIdPCMALAW:  {8, "PCMA", utils.AVMediaTypeAudio, utils.AVCodecIdPCMALAW, 8000, 1},
+
+		utils.AVCodecIdH264: {108, "H264", utils.AVMediaTypeVideo, utils.AVCodecIdH264, 90000, 1},
+		utils.AVCodecIdAAC:  {97, "mpeg4-generic", utils.AVMediaTypeAudio, utils.AVCodecIdAAC, 48000, 1},
+		utils.AVCodecIdOPUS: {111, "OPUS", utils.AVMediaTypeAudio, utils.AVCodecIdOPUS, 48000, 2},
 	}
 }
 

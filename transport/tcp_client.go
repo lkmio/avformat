@@ -9,7 +9,7 @@ type TCPClient struct {
 	transportImpl
 }
 
-func (t *TCPClient) Bind(addr string) error {
+func (t *TCPClient) Bind(addr net.Addr) error {
 	panic("please use the connect func")
 }
 

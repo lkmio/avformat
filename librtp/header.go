@@ -1,6 +1,9 @@
 package librtp
 
-import "github.com/yangjiechina/avformat/utils"
+import (
+	"encoding/binary"
+	"github.com/yangjiechina/avformat/utils"
+)
 
 const (
 	VERSION           = 2
@@ -102,4 +105,15 @@ func (h *Header) Padding() bool {
 
 func (h *Header) Extension() bool {
 	return h.x == 1
+}
+
+func RollbackSeq(header []byte, nextSeq int) {
+	utils.Assert(nextSeq < 65536)
+	seq := nextSeq - 1
+	if seq < 0 {
+		seq += 65536
+
+	}
+
+	binary.BigEndian.PutUint16(header[2:], uint16(seq))
 }

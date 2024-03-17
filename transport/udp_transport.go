@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"runtime"
 	"syscall"
@@ -20,7 +21,9 @@ func reusePortControl(network, address string, c syscall.RawConn) error {
 	})
 }
 
-func (u *UDPTransport) Bind(addr string) error {
+func (u *UDPTransport) Bind(addr net.Addr) error {
+	utils.Assert(u.handler != nil)
+
 	count := runtime.NumCPU()
 	if runtime.GOOS == "darwin" {
 		count = 1
@@ -31,7 +34,7 @@ func (u *UDPTransport) Bind(addr string) error {
 		lc := net.ListenConfig{
 			Control: reusePortControl,
 		}
-		socket, err := lc.ListenPacket(u.ctx, "udp", addr)
+		socket, err := lc.ListenPacket(u.ctx, "udp", addr.String())
 		if err != nil {
 			return err
 		}
