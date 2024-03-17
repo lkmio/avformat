@@ -10,7 +10,7 @@ type AACMuxer struct {
 func NewAACMuxer(payload int, seq int, ssrc uint32) Muxer {
 	m := &AACMuxer{}
 	m.init(payload, seq, ssrc)
-	m.enableMark = false
+	m.enableMark = true
 	m.auHeader = make([]byte, 4)
 	m.payloadSize -= 4
 	m.auHeader[0] = 0x00
