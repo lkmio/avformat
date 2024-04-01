@@ -13,3 +13,4 @@ go.sum
 *.vob
 *.audio
 *.video
+vendor/

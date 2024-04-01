@@ -11,7 +11,7 @@ import (
 type Handler struct {
 	streams []utils.AVStream
 	first   bool
-	muxer   *Muxer
+	muxer   Muxer
 	out     *os.File
 
 	audioOut *os.File
@@ -26,7 +26,7 @@ func (h *Handler) OnDeMuxStreamDone() {
 
 }
 
-func (h *Handler) OnDeMuxPacket(index int, packet utils.AVPacket) {
+func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
 	println(fmt.Sprintf("OnDeMuxPacket dts:%d pts:%d", packet.Dts(), packet.Pts()))
 
 	if h.first {
@@ -35,17 +35,23 @@ func (h *Handler) OnDeMuxPacket(index int, packet utils.AVPacket) {
 		var videoStream utils.AVStream
 		var audioCodecId utils.AVCodecID
 		var videoCodecId utils.AVCodecID
+		h.muxer = NewMuxer()
 		for _, stream := range h.streams {
 			if utils.AVMediaTypeAudio == stream.Type() {
 				audioStream = stream
 				audioCodecId = audioStream.CodecId()
+
+				h.muxer.AddAudioTrack(audioCodecId, -1, -1, -1)
 			} else if utils.AVMediaTypeVideo == stream.Type() {
 				videoStream = stream
 				videoCodecId = videoStream.CodecId()
+
+				h.muxer.AddVideoTrack(videoCodecId)
+				h.muxer.AddProperty("width", videoStream.(utils.VideoStream).Width())
+				h.muxer.AddProperty("height", videoStream.(utils.VideoStream).Height())
 			}
 		}
 
-		h.muxer = NewMuxer(audioCodecId, videoCodecId, 0, 0, 0)
 		var header_ [512]byte
 		n := h.muxer.WriteHeader(header_[:])
 

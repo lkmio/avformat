@@ -24,9 +24,20 @@ type AVStream interface {
 	AnnexBExtraData() ([]byte, error)
 }
 
+type VideoStream interface {
+	AVStream
+
+	Width() uint
+
+	Height() uint
+}
+
 func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, extraType ExtraType) AVStream {
-	stream := &avStream{type_: type_, index: index, codecId: codecId, data: extra, extraType: extraType}
-	return stream
+	return &avStream{type_: type_, index: index, codecId: codecId, data: extra, extraType: extraType}
+}
+
+func NewVideoStream(stream AVStream, width, height uint) AVStream {
+	return &videoStream{stream.(*avStream), width, height}
 }
 
 type avStream struct {
@@ -95,4 +106,19 @@ func (a *avStream) AnnexBExtraData() ([]byte, error) {
 	a.extraAnnexBSize = len(b)
 
 	return a.extraAnnexB[:a.extraAnnexBSize], nil
+}
+
+type videoStream struct {
+	*avStream
+
+	width  uint
+	height uint
+}
+
+func (v *videoStream) Width() uint {
+	return v.width
+}
+
+func (v *videoStream) Height() uint {
+	return v.height
 }

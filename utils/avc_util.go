@@ -7,6 +7,9 @@ var (
 	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
+type PPSInfo struct {
+}
+
 // FindStartCode 返回的是NalUHeader的位置
 func FindStartCode(p []byte) int {
 	length := len(p)

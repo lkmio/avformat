@@ -244,8 +244,25 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 		}
 
 		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC)
-		d.Handler.OnDeMuxStream(stream)
+		extraData, err := stream.AnnexBExtraData()
+		if err != nil {
+			return err
+		}
 
+		err = fmt.Errorf("failed to parse SPS info")
+		sps := utils.SPSInfo{}
+		utils.SplitNalU(extraData, func(nalu []byte) {
+			bytes := utils.RemoveStartCode(nalu)
+			if utils.H264NalSPS == bytes[0]&0x1F {
+				sps, err = utils.ParseSPS(bytes)
+			}
+		})
+
+		if err != nil {
+			return err
+		}
+
+		d.Handler.OnDeMuxStream(utils.NewVideoStream(stream, sps.Width, sps.Height))
 		if d.audioIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
 		}
