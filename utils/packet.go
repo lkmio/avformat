@@ -32,6 +32,10 @@ type AVPacket interface {
 	ConvertPts(dst int) int64
 
 	ConvertDts(dst int) int64
+
+	SetDuration(duration int64)
+
+	Duration(timebase int) int64
 }
 
 type avPacket struct {
@@ -41,9 +45,10 @@ type avPacket struct {
 	dataAnnexB     []byte
 	dataAnnexBSize int
 
-	dts int64
-	pts int64
-	key bool
+	dts      int64
+	pts      int64
+	duration int64
+	key      bool
 
 	//打包模式
 	packetType PacketType
@@ -65,13 +70,17 @@ func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType
 	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index, timebase: timebase}
 }
 
+func ConvertTs(ts int64, srcTimeBase, dstTimeBase int) int64 {
+	interval := float64(dstTimeBase) / float64(srcTimeBase)
+	return int64(float64(ts) * interval)
+}
+
 func (pkt *avPacket) Dts() int64 {
 	return pkt.dts
 }
 
 func (pkt *avPacket) ConvertDts(dst int) int64 {
-	interval := float64(dst) / float64(pkt.timebase)
-	return int64(float64(pkt.dts) * interval)
+	return ConvertTs(pkt.dts, pkt.timebase, dst)
 }
 
 func (pkt *avPacket) Pts() int64 {
@@ -79,8 +88,7 @@ func (pkt *avPacket) Pts() int64 {
 }
 
 func (pkt *avPacket) ConvertPts(dst int) int64 {
-	interval := float64(dst) / float64(pkt.timebase)
-	return int64(float64(pkt.pts) * interval)
+	return ConvertTs(pkt.pts, pkt.timebase, dst)
 }
 
 func (pkt *avPacket) MediaType() AVMediaType {
@@ -142,4 +150,16 @@ func (pkt *avPacket) AVCCPacketData() []byte {
 
 func (pkt *avPacket) Index() int {
 	return pkt.index
+}
+
+func (pkt *avPacket) SetDuration(duration int64) {
+	pkt.duration = duration
+}
+
+func (pkt *avPacket) Duration(timebase int) int64 {
+	if pkt.timebase == timebase {
+		return pkt.duration
+	}
+
+	return ConvertTs(pkt.duration, pkt.timebase, timebase)
 }
