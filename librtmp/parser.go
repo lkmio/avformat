@@ -156,8 +156,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			rest := length - i
 
 			if p.chunk.Length == 0 {
-				println(fmt.Printf("bad message. the length of an rtmp message cannot be zero."))
-				break
+				return nil, -1, fmt.Errorf("bad message. the length of an rtmp message cannot be zero")
 			}
 
 			need := p.chunk.Length - p.chunk.size

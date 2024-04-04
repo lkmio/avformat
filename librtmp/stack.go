@@ -59,6 +59,8 @@ type Stack struct {
 	stream           string
 	handler          OnEventHandler
 	publisherHandler OnPublishHandler
+
+	metaData map[string]interface{}
 }
 
 func NewStack(handler OnEventHandler) *Stack {
@@ -128,6 +130,7 @@ func (s *Stack) Input(conn net.Conn, data []byte) error {
 		s.handshakeBufferSize = 0
 	}
 
+	//握手
 	if HandshakeStateDone != s.handshakeState {
 
 		n, err := s.DoHandshake(conn, tmp)
@@ -158,6 +161,7 @@ func (s *Stack) Input(conn net.Conn, data []byte) error {
 		}
 	}
 
+	//读取并处理消息
 	var consume int
 	for consume < len(tmp) {
 		chunk, n, err := s.parser.ReadChunk(tmp[consume:])
@@ -238,7 +242,18 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 		if err != nil {
 			return err
 		}
-		println(amf0)
+		if len(amf0) < 3 {
+			return nil
+		}
+
+		if str, ok := amf0[1].(string); ok && "onMetaData" == str {
+			metaData, ok := amf0[2].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("failed to parse the meatadata of rtmp")
+			}
+
+			s.metaData = metaData
+		}
 		break
 	case MessageTypeIDDataAMF3:
 		break
@@ -302,10 +317,27 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				size: len(chunkSize),
 			}
 
-			var tmp [64]byte
+			var tmp [512]byte
 			writer := libflv.NewAMF0Writer()
 			writer.AddString(MessageResult)
+			//always equal to 1 for the connect command
 			writer.AddNumber(transactionId)
+			//https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol#Connect
+			properties := &libflv.AMF0Object{}
+			properties.AddStringProperty("fmsVer", "FMS/3,5,5,2004")
+			properties.AddNumberProperty("capabilities", 31)
+			properties.AddNumberProperty("mode", 1)
+
+			information := &libflv.AMF0Object{}
+			information.AddStringProperty("level", "status")
+			information.AddStringProperty("code", "NetConnection.Connect.Success")
+			information.AddStringProperty("description", "Connection succeeded")
+			information.AddNumberProperty("clientId", 0)
+			information.AddNumberProperty("objectEncoding", 3.0)
+
+			writer.AddObject(properties)
+			writer.AddObject(information)
+			//writer
 			n := writer.ToBytes(tmp[:])
 
 			response := Chunk{
@@ -320,7 +352,23 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				size: n,
 			}
 
-			err = s.SendChunks(conn, acknow, bandwidth, setChunkSize, response)
+			for i := 2; i < len(amf0); i++ {
+				obj, ok := amf0[i].(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				app, ok := obj["app"]
+				if !ok {
+					continue
+				}
+
+				if str, ok := app.(string); ok {
+					s.app = str
+				}
+			}
+
+			err = s.SendChunks(conn, acknow, bandwidth, response, setChunkSize)
 			s.parser.chunkSize = ChunkSize
 			return err
 		} else if MessageFcPublish == command {
@@ -349,20 +397,11 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				size: n,
 			}
 
-			for i := 2; i < len(amf0); i++ {
-				str, ok := amf0[i].(string)
-				if ok {
-					s.app = str
-					break
-				}
-			}
-
 			return s.SendChunks(conn, response)
 		} else if MessagePublish == command {
 			//stream
 			for i := 2; i < len(amf0); i++ {
-				str, ok := amf0[i].(string)
-				if ok {
+				if str, ok := amf0[i].(string); ok {
 					s.stream = str
 					break
 				}
@@ -458,4 +497,8 @@ func (s *Stack) sendStatus(conn net.Conn, transactionId float64, level, code, de
 
 func (s *Stack) Close() {
 
+}
+
+func (s *Stack) MetaData() map[string]interface{} {
+	return s.metaData
 }
