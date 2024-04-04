@@ -118,7 +118,7 @@ func TestDeMuxer(t *testing.T) {
 		outfile.Close()
 	}()
 
-	muxer := DeMuxer{}
+	muxer := NewDeMuxer(TSModeAbsolute)
 	handler := &Handler{first: true, out: outfile, audioOut: aacFile, videoOut: h264File}
 	muxer.SetHandler(handler)
 

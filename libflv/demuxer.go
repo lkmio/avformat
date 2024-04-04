@@ -12,6 +12,8 @@ type VideoCodecId byte
 type SoundFormat byte
 type SoundRate byte
 
+type TSMode byte
+
 const (
 	TagTypeAudioData        = TagType(8)
 	TagTypeVideoData        = TagType(9)
@@ -34,11 +36,29 @@ const (
 	SoundRate11000HZ = SoundRate(1)
 	SoundRate22000HZ = SoundRate(2)
 	SoundRate44000HZ = SoundRate(3) //For AAC:always 3
+
+	TSModeAbsolute = TSMode(1)
+	TSModeRelative = TSMode(2)
+
+	AACFrameSize = 1024
+	MP3FrameSize = 1152
 )
 
 type MP3Header uint32
 
-type DeMuxer struct {
+type DeMuxer interface {
+	stream.DeMuxer
+
+	// InputVideo 输入不带tag的视频帧
+	// @ts rtmp是相对时间
+	//	   flv tag是绝对时间
+	InputVideo(data []byte, ts uint32) error
+
+	// InputAudio 输入不带tag的音频帧
+	InputAudio(data []byte, ts uint32) error
+}
+
+type deMuxer struct {
 	stream.DeMuxerImpl
 
 	/**
@@ -61,13 +81,16 @@ type DeMuxer struct {
 	tag Tag
 
 	audioIndex int
-
 	videoIndex int
 
 	audioTs int64
 	videoTs int64
 
 	completed bool
+	tsMode    TSMode
+
+	videoStream utils.AVStream
+	audioStream utils.AVStream
 }
 
 type Tag struct {
@@ -80,11 +103,11 @@ type Tag struct {
 	size int
 }
 
-func NewDeMuxer() stream.DeMuxer {
-	return &DeMuxer{audioIndex: -1, videoIndex: -1}
+func NewDeMuxer(tsMode TSMode) DeMuxer {
+	return &deMuxer{audioIndex: -1, videoIndex: -1, tsMode: tsMode}
 }
 
-func (d *DeMuxer) readScriptDataObject(data []byte) error {
+func (d *deMuxer) readScriptDataObject(data []byte) error {
 	buffer := utils.NewByteBuffer(data)
 
 	if err := buffer.PeekCount(1); err != nil {
@@ -106,7 +129,7 @@ func (d *DeMuxer) readScriptDataObject(data []byte) error {
 	return nil
 }
 
-func (d *DeMuxer) readHeader(data []byte) error {
+func (d *deMuxer) readHeader(data []byte) error {
 	if len(data) < 9 {
 		return fmt.Errorf("the header of FLV requires 9 bytes")
 	}
@@ -134,7 +157,7 @@ func (d *DeMuxer) readHeader(data []byte) error {
 // TagType tag类型
 // int data size
 // uint32 timestamp
-func (d *DeMuxer) readTag(data []byte) Tag {
+func (d *deMuxer) readTag(data []byte) Tag {
 	_ = data[15]
 	timestamp := utils.BytesToUInt24WhitSlice(data[8:])
 	timestamp |= uint32(data[11]) << 24
@@ -142,7 +165,7 @@ func (d *DeMuxer) readTag(data []byte) Tag {
 	return Tag{preSize: binary.BigEndian.Uint32(data), type_: TagType(data[4]), dataSize: int(utils.BytesToUInt24WhitSlice(data[5:])), timestamp: timestamp}
 }
 
-func (d *DeMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
+func (d *deMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
 	if TagTypeAudioData == tagType {
 		err := d.InputAudio(data, ts)
 		if err != nil {
@@ -162,7 +185,8 @@ func (d *DeMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
 	return nil
 }
 
-func (d *DeMuxer) Input(data []byte) (int, error) {
+// Input 输入tag
+func (d *deMuxer) Input(data []byte) (int, error) {
 	var n int
 	if !d.headerCompleted {
 		if err := d.readHeader(data); err != nil {
@@ -225,7 +249,8 @@ func (d *DeMuxer) Input(data []byte) (int, error) {
 	return n, nil
 }
 
-func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
+// InputVideo 输入不带tag的视频帧
+func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 	n, sequenceHeader, key, codecId, ct, err := ParseVideoData(data)
 	if err != nil {
 		return err
@@ -262,7 +287,8 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 			return err
 		}
 
-		d.Handler.OnDeMuxStream(utils.NewVideoStream(stream, sps.Width, sps.Height))
+		d.videoStream = utils.NewVideoStream(stream, sps.Width, sps.Height)
+		d.Handler.OnDeMuxStream(d.videoStream)
 		if d.audioIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
 		}
@@ -271,15 +297,24 @@ func (d *DeMuxer) InputVideo(data []byte, ts uint32) error {
 			return fmt.Errorf("missing video sequence header")
 		}
 
-		d.videoTs += int64(ts)
+		var duration int64
+		if TSModeAbsolute == d.tsMode {
+			duration = int64(ts) - d.videoTs
+			d.videoTs = int64(ts)
+		} else {
+			d.videoTs += int64(ts)
+			duration = int64(ts)
+		}
+
 		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex, 1000)
+		packet.SetDuration(duration)
 		d.Handler.OnDeMuxPacket(packet)
 	}
 
 	return nil
 }
 
-func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
+func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 	n, sequenceHeader, codecId, err := ParseAudioData(data)
 	if err != nil {
 		return err
@@ -290,15 +325,14 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 			return nil
 		}
 
-		var stream utils.AVStream
 		if d.videoIndex == -1 {
 			d.audioIndex = 0
 		} else {
 			d.audioIndex = 1
 		}
 
-		stream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
-		d.Handler.OnDeMuxStream(stream)
+		d.audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
+		d.Handler.OnDeMuxStream(d.audioStream)
 
 		if d.videoIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
@@ -308,8 +342,25 @@ func (d *DeMuxer) InputAudio(data []byte, ts uint32) error {
 			return fmt.Errorf("missing audio sequence header")
 		}
 
-		d.audioTs += int64(ts)
-		packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex, 1000)
+		var duration int64
+		if TSModeAbsolute == d.tsMode {
+			duration = int64(ts) - d.audioTs
+			d.audioTs = int64(ts)
+		} else {
+			d.audioTs += int64(ts)
+			duration = int64(ts)
+		}
+
+		timeBase := 1000
+		ts := d.audioTs
+		if d.audioStream.CodecId() == utils.AVCodecIdAAC {
+			ts = utils.ConvertTs(d.audioTs, 1000, AACFrameSize)
+			duration += ts - d.audioTs
+			timeBase = AACFrameSize
+		}
+
+		packet := utils.NewAudioPacket(data[n:], ts, ts, codecId, d.audioIndex, timeBase)
+		packet.SetDuration(duration)
 		d.Handler.OnDeMuxPacket(packet)
 	}
 
