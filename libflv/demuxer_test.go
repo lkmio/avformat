@@ -55,13 +55,13 @@ func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
 		var header_ [512]byte
 		n := h.muxer.WriteHeader(header_[:])
 
-		if audioStream != nil {
+		if audioStream != nil && len(audioStream.Extra()) > 0 {
 			n += h.muxer.Input(header_[n:], utils.AVMediaTypeAudio, len(audioStream.Extra()), 0, 0, false, true)
 			copy(header_[n:], audioStream.Extra())
 			n += len(audioStream.Extra())
 		}
 
-		if videoStream != nil {
+		if videoStream != nil && len(videoStream.Extra()) > 0 {
 			n += h.muxer.Input(header_[n:], utils.AVMediaTypeVideo, len(videoStream.Extra()), 0, 0, false, true)
 			copy(header_[n:], videoStream.Extra())
 			n += len(videoStream.Extra())

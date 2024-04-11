@@ -320,7 +320,7 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 		return err
 	}
 
-	if sequenceHeader {
+	if d.audioStream == nil {
 		if d.completed {
 			return nil
 		}
@@ -331,38 +331,49 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 			d.audioIndex = 1
 		}
 
-		d.audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
-		d.Handler.OnDeMuxStream(d.audioStream)
+		var audioStream utils.AVStream
+		if utils.AVCodecIdAAC == codecId && sequenceHeader {
+			n = len(data)
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
+		} else {
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, utils.ExtraTypeNONE)
+		}
 
+		d.audioStream = audioStream
+		d.Handler.OnDeMuxStream(d.audioStream)
 		if d.videoIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
 		}
-	} else {
-		if d.audioIndex == -1 {
-			return fmt.Errorf("missing audio sequence header")
-		}
 
-		var duration int64
-		if TSModeAbsolute == d.tsMode {
-			duration = int64(ts) - d.audioTs
-			d.audioTs = int64(ts)
-		} else {
-			d.audioTs += int64(ts)
-			duration = int64(ts)
+		if n >= len(data) {
+			return nil
 		}
-
-		timeBase := 1000
-		ts := d.audioTs
-		if d.audioStream.CodecId() == utils.AVCodecIdAAC {
-			ts = utils.ConvertTs(d.audioTs, 1000, AACFrameSize)
-			duration += ts - d.audioTs
-			timeBase = AACFrameSize
-		}
-
-		packet := utils.NewAudioPacket(data[n:], ts, ts, codecId, d.audioIndex, timeBase)
-		packet.SetDuration(duration)
-		d.Handler.OnDeMuxPacket(packet)
 	}
+
+	if d.audioIndex == -1 {
+		return fmt.Errorf("missing audio sequence header")
+	}
+
+	var duration int64
+	if TSModeAbsolute == d.tsMode {
+		duration = int64(ts) - d.audioTs
+		d.audioTs = int64(ts)
+	} else {
+		d.audioTs += int64(ts)
+		duration = int64(ts)
+	}
+
+	timeBase := 1000
+	curTs := d.audioTs
+	if d.audioStream.CodecId() == utils.AVCodecIdAAC {
+		curTs = utils.ConvertTs(d.audioTs, 1000, AACFrameSize)
+		duration += curTs - d.audioTs
+		timeBase = AACFrameSize
+	}
+
+	packet := utils.NewAudioPacket(data[n:], curTs, curTs, codecId, d.audioIndex, timeBase)
+	packet.SetDuration(duration)
+	d.Handler.OnDeMuxPacket(packet)
 
 	return nil
 }
@@ -389,7 +400,11 @@ func ParseAudioData(data []byte) (int, bool, utils.AVCodecID, error) {
 			return 2, false, utils.AVCodecIdAAC, nil
 		}
 	} else if byte(SoundFormatMP3) == soundFormat {
-		return 0, false, utils.AVCodecIdMP3, nil
+		return 1, false, utils.AVCodecIdMP3, nil
+	} else if byte(SoundFormatG711A) == soundFormat {
+		return 1, false, utils.AVCodecIdPCMALAW, nil
+	} else if byte(SoundFormatG711B) == soundFormat {
+		return 1, false, utils.AVCodecIdPCMMULAW, nil
 	}
 
 	return -1, false, utils.AVCodecIdNONE, fmt.Errorf("the codec %d is currently not supported in FLV", soundFormat)

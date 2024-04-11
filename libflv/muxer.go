@@ -33,7 +33,7 @@ type muxer struct {
 	videoCodecId VideoCodecId
 	soundFormat  SoundFormat
 	soundRate    SoundRate
-	soundType    byte
+	soundType    byte //0-mono/1-stereo. for Nellymoser always:0, For AAC always:1
 	soundSize    byte //0-8位深/1-16位深
 	preSize      uint32
 
@@ -68,6 +68,18 @@ func (m *muxer) AddAudioTrack(id utils.AVCodecID, soundRate, soundType, soundSiz
 
 	if utils.AVCodecIdAAC == id {
 		m.soundFormat = SoundFormatAAC
+		m.soundRate = SoundRate44000HZ
+		m.soundType = 1
+	} else if utils.AVCodecIdPCMALAW == id {
+		m.soundFormat = SoundFormatG711A
+		m.soundRate = SoundRate44000HZ
+		m.soundType = 0
+	} else if utils.AVCodecIdPCMALAW == id {
+		m.soundFormat = SoundFormatG711B
+		m.soundRate = SoundRate44000HZ
+		m.soundType = 0
+	} else if utils.AVCodecIdMP3 == id {
+		m.soundFormat = SoundFormatMP3
 		m.soundRate = SoundRate44000HZ
 		m.soundType = 1
 	} else {
