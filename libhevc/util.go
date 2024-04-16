@@ -2,12 +2,17 @@ package libhevc
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
+)
+
+var (
+	StartCode3 = []byte{0x00, 0x00, 0x01}
+	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
 func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
-	dstBuffer := utils.NewByteBuffer()
-	buffer := utils.NewByteBuffer(src)
+	dstBuffer := libbufio.NewByteBuffer()
+	buffer := libbufio.NewByteBuffer(src)
 	buffer.Skip(21)
 	lengthSize := buffer.ReadUInt8()&3 + 1
 	arrays := int(buffer.ReadUInt8())
@@ -15,11 +20,11 @@ func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
 		t := HEVCNALUnitType(buffer.ReadUInt8() & 0x3F)
 		count := int(buffer.ReadUInt16())
 		if t != HevcNalVPS && t != HevcNalSPS && t != HevcNalPPS && t != HevcNalSeiPPrefix && t != HevcNalSeiSuffix {
-			return nil, -1, fmt.Errorf("invalid data")
+			return nil, -1, fmt.Errorf("invalid NAL unit type in extradata:%d", t)
 		}
 		for j := 0; j < count; j++ {
 			nalUnitLen := int(buffer.ReadUInt16())
-			dstBuffer.Write(utils.StartCode4)
+			dstBuffer.Write(StartCode4)
 			offset := buffer.ReadOffset()
 			dstBuffer.Write(src[offset : offset+nalUnitLen])
 			buffer.Skip(nalUnitLen)
@@ -29,13 +34,15 @@ func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
 	return dstBuffer.ToBytes(), int(lengthSize), nil
 }
 
-func Mp4ToAnnexB(dst utils.ByteBuffer, data, extra []byte, lengthSize int) error {
+func Mp4ToAnnexB(dst []byte, data, extra []byte, lengthSize int) (int, error) {
+	var n int
 	length, index := len(data), 0
 	gotIRAP := 0
 	extraSize := len(extra)
+
 	for index < length {
 		if length-index < lengthSize {
-			return fmt.Errorf("invalid data")
+			return -1, fmt.Errorf("invalid data")
 		}
 
 		var nalUnitSize int
@@ -49,7 +56,7 @@ func Mp4ToAnnexB(dst utils.ByteBuffer, data, extra []byte, lengthSize int) error
 		}
 
 		if nalUnitSize < 2 || nalUnitSize > length-index {
-			return fmt.Errorf("invalid data")
+			return -1, fmt.Errorf("invalid data")
 		}
 
 		nalUnitType = int(data[index]>>1) & 0x3F
@@ -63,13 +70,17 @@ func Mp4ToAnnexB(dst utils.ByteBuffer, data, extra []byte, lengthSize int) error
 		}
 
 		if addExtraData && extraSize > 0 {
-			dst.Write(extra)
+			copy(dst[n:], extra)
+			n += extraSize
 		}
 
-		dst.Write(utils.StartCode4)
-		dst.Write(data[index : index+nalUnitSize])
+		copy(dst[n:], StartCode4)
+		n += 4
+
+		copy(dst[n:], data[index:index+nalUnitSize])
+		n += nalUnitSize
 		index += nalUnitSize
 	}
 
-	return nil
+	return n, nil
 }

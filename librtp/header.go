@@ -2,6 +2,7 @@ package librtp
 
 import (
 	"encoding/binary"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -44,27 +45,27 @@ func (h *Header) toBytes(dst []byte) int {
 	dst[1] = h.m << 7
 	dst[1] = dst[1] | (h.pt & 0x7F)
 
-	utils.WriteWORD(dst[2:], uint16(h.seq))
-	utils.WriteDWORD(dst[4:], h.timestamp)
-	utils.WriteDWORD(dst[8:], h.ssrc)
+	libbufio.WriteWORD(dst[2:], uint16(h.seq))
+	libbufio.WriteDWORD(dst[4:], h.timestamp)
+	libbufio.WriteDWORD(dst[8:], h.ssrc)
 
 	//csrc
 	offset := FixedHeaderLength
 	if h.cc > 0 {
 		for i, v := range h.csrc {
 			offset += i * 4
-			utils.WriteDWORD(dst[offset:], v)
+			libbufio.WriteDWORD(dst[offset:], v)
 		}
 	}
 
 	//extension
 	if h.p > 0 {
-		utils.WriteWORD(dst[offset:], h.extensionProfile)
-		utils.WriteWORD(dst[offset+2:], h.extensionLength)
+		libbufio.WriteWORD(dst[offset:], h.extensionProfile)
+		libbufio.WriteWORD(dst[offset+2:], h.extensionLength)
 		offset += 4
 		for i, v := range h.extensions {
 			offset += i * 4
-			utils.WriteDWORD(dst[offset:], v)
+			libbufio.WriteDWORD(dst[offset:], v)
 		}
 	}
 

@@ -1,7 +1,7 @@
 package libmp4
 
 import (
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
 )
 
 /*
@@ -62,7 +62,7 @@ type userDataBox struct {
 }
 
 func parseMovieHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	mvhd := movieHeaderBox{fullBox: fullBox{version: version, flags: flags}}

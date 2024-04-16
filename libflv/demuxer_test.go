@@ -27,7 +27,11 @@ func (h *Handler) OnDeMuxStreamDone() {
 }
 
 func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
-	println(fmt.Sprintf("OnDeMuxPacket dts:%d pts:%d", packet.Dts(), packet.Pts()))
+	utils.Assert(packet.Dts() <= packet.Pts())
+
+	if utils.AVMediaTypeVideo == packet.MediaType() {
+		println(fmt.Sprintf("OnDeMuxPacket dts:%d pts:%d", packet.Dts(), packet.Pts()))
+	}
 
 	if h.first {
 		h.first = false
@@ -47,8 +51,11 @@ func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
 				videoCodecId = videoStream.CodecId()
 
 				h.muxer.AddVideoTrack(videoCodecId)
-				h.muxer.AddProperty("width", videoStream.(utils.VideoStream).Width())
-				h.muxer.AddProperty("height", videoStream.(utils.VideoStream).Height())
+
+				width := int(videoStream.CodecParameters().SPSInfo().Width())
+				height := int(videoStream.CodecParameters().SPSInfo().Height())
+				h.muxer.AddProperty("width", width)
+				h.muxer.AddProperty("height", height)
 			}
 		}
 

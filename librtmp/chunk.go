@@ -3,6 +3,7 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -156,15 +157,15 @@ func (h *Chunk) ToBytes(dst []byte) int {
 
 	if h.type_ < ChunkType3 {
 		if h.Timestamp >= 0xFFFFFF {
-			utils.WriteUInt24(dst[index:], 0xFFFFFF)
+			libbufio.WriteUInt24(dst[index:], 0xFFFFFF)
 		} else {
-			utils.WriteUInt24(dst[index:], uint32(h.Timestamp))
+			libbufio.WriteUInt24(dst[index:], uint32(h.Timestamp))
 		}
 		index += 3
 	}
 
 	if h.type_ < ChunkType2 {
-		utils.WriteUInt24(dst[index:], uint32(h.Length))
+		libbufio.WriteUInt24(dst[index:], uint32(h.Length))
 		index += 4
 		dst[index-1] = byte(h.tid)
 	}
@@ -193,7 +194,7 @@ func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
 			n++
 		}
 
-		consume := utils.MinInt(length, chunkSize)
+		consume := libbufio.MinInt(length, chunkSize)
 		offset := h.Length - length
 		copy(data[n:], h.data[offset:offset+consume])
 		length -= consume
@@ -203,17 +204,17 @@ func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
 	return n
 }
 
-func (h *Chunk) WriteData(dst, data []byte, chunkSize int) int {
+func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
 	length := len(data)
 	first := true
 	var n int
 	for length > 0 {
 		var min int
 		if first {
-			min = utils.MinInt(length, chunkSize-5)
+			min = libbufio.MinInt(length, chunkSize-offset)
 			first = false
 		} else {
-			min = utils.MinInt(length, chunkSize)
+			min = libbufio.MinInt(length, chunkSize)
 		}
 
 		copy(dst[n:], data[:min])
@@ -273,13 +274,13 @@ func readChunkHeader(src []byte) (Chunk, int, error) {
 	}
 
 	if header.type_ < ChunkType3 {
-		header.Timestamp = uint32(utils.BytesToInt(src[i : i+3]))
+		header.Timestamp = uint32(libbufio.BytesToInt(src[i : i+3]))
 		i += 3
 	}
 
 	if header.type_ < ChunkType2 {
 		i += 3
-		header.Length = utils.BytesToInt(src[i-3 : i])
+		header.Length = libbufio.BytesToInt(src[i-3 : i])
 		header.tid = MessageTypeID(src[i])
 		i++
 	}

@@ -3,6 +3,7 @@ package libflv
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"time"
 )
@@ -21,6 +22,8 @@ type Muxer interface {
 	WriteAudioData(dst []byte, header bool) int
 
 	WriteVideoData(dst []byte, ct uint32, key, header bool) int
+
+	ComputeVideoDataSize(ct uint32) int
 
 	// AddProperty 添加元数据
 	AddProperty(name string, value interface{}) error
@@ -55,8 +58,8 @@ func (m *muxer) AddVideoTrack(id utils.AVCodecID) {
 
 	if utils.AVCodecIdH264 == id {
 		m.videoCodecId = VideoCodeIdH264
-	} else {
-		utils.Assert(false)
+	} else if utils.AVCodecIdH265 == id {
+		m.videoCodecId = VideoCodeIdHEVC
 	}
 
 	m.existVideo = true
@@ -114,22 +117,22 @@ func (m *muxer) WriteHeader(data []byte) int {
 	amf0.AddString("onMetaData")
 	amf0.AddObject(m.metaData)
 	//先写metadata
-	n := amf0.ToBytes(data[9+15:])
+	n := amf0.ToBytes(data[9+TagHeaderSize:])
 	//再写tag
 	m.writeTag(data[9:], TagTypeScriptDataObject, uint32(n), 0)
-	return 9 + 15 + n
+	return 9 + TagHeaderSize + n
 }
 
 func (m *muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts, pts int64, key, header_ bool) int {
 	if utils.AVMediaTypeAudio == mediaType {
 		_ = dst[16]
-		n := m.WriteTag(dst, mediaType, uint32(pktSize+2), uint32(dts))
-		n += m.WriteAudioData(dst[n:], header_)
+		n := m.WriteAudioData(dst[TagHeaderSize:], header_)
+		n += m.WriteTag(dst, mediaType, uint32(pktSize+n), uint32(dts))
 		return n
 	} else if utils.AVMediaTypeVideo == mediaType {
 		_ = dst[19]
-		n := m.WriteTag(dst, mediaType, uint32(pktSize+5), uint32(dts))
-		n += m.WriteVideoData(dst[n:], uint32(pts-dts), key, header_)
+		n := m.WriteVideoData(dst[TagHeaderSize:], uint32(pts-dts), key, header_)
+		n += m.WriteTag(dst, mediaType, uint32(pktSize+n), uint32(dts))
 		return n
 	}
 
@@ -139,13 +142,13 @@ func (m *muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts,
 func (m *muxer) writeTag(dst []byte, tag TagType, dataSize, timestamp uint32) int {
 	binary.BigEndian.PutUint32(dst, m.preSize)
 	dst[4] = byte(tag)
-	utils.WriteUInt24(dst[5:], dataSize)
-	utils.WriteUInt24(dst[8:], timestamp&0xFFFFFF)
+	libbufio.WriteUInt24(dst[5:], dataSize)
+	libbufio.WriteUInt24(dst[8:], timestamp&0xFFFFFF)
 	dst[11] = byte(timestamp >> 24)
-	utils.WriteUInt24(dst[12:], 0)
+	libbufio.WriteUInt24(dst[12:], 0)
 
 	m.preSize = 11 + dataSize
-	return 15
+	return TagHeaderSize
 }
 
 func (m *muxer) WriteTag(dst []byte, mediaType utils.AVMediaType, dataSize, timestamp uint32) int {
@@ -172,6 +175,14 @@ func (m *muxer) WriteAudioData(dst []byte, header bool) int {
 	return 2
 }
 
+func (m *muxer) ComputeVideoDataSize(ct uint32) int {
+	if ct > 0 {
+		return 8
+	}
+
+	return 5
+}
+
 func (m *muxer) WriteVideoData(dst []byte, ct uint32, key, header bool) int {
 	_ = dst[4]
 	var frameType byte
@@ -181,15 +192,43 @@ func (m *muxer) WriteVideoData(dst []byte, ct uint32, key, header bool) int {
 		frameType = 0
 	}
 
-	dst[0] = frameType<<4 | byte(m.videoCodecId)
-	if header {
-		dst[1] = 0
-	} else {
-		dst[1] = 1
-	}
-	utils.WriteUInt24(dst[2:], ct)
+	n := 1
+	setCt := true
+	codecId := byte(m.videoCodecId)
+	if VideoCodeIdHEVC == m.videoCodecId {
+		setCt = ct != 0
+		frameType |= 0b1000
 
-	return 5
+		if header {
+			codecId = byte(PacketTypeSequenceStart)
+		} else {
+			if setCt {
+				codecId = byte(PacketTypeCodedFrames)
+			} else {
+				codecId = byte(PacketTypeCodedFramesX)
+			}
+		}
+
+		binary.BigEndian.PutUint32(dst[n:], uint32(m.videoCodecId))
+		n += 4
+	} else {
+		if header {
+			dst[n] = 0
+		} else {
+			dst[n] = 1
+		}
+
+		n++
+	}
+
+	dst[0] = frameType<<4 | codecId
+
+	if setCt {
+		libbufio.WriteUInt24(dst[n:], ct)
+		n += 3
+	}
+
+	return n
 }
 
 func (m *muxer) AddProperty(name string, value interface{}) error {

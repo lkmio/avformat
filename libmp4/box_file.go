@@ -1,6 +1,8 @@
 package libmp4
 
-import "github.com/yangjiechina/avformat/utils"
+import (
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 /*
 *
@@ -57,7 +59,7 @@ type movieBox struct {
 }
 
 func parseFileTypeBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	ftyp := fileTypeBox{}
 	ftyp.majorBrand = buffer.ReadUInt32()
 	ftyp.minorVersion = buffer.ReadUInt32()

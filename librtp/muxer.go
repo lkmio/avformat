@@ -1,7 +1,7 @@
 package librtp
 
 import (
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
 )
 
 type allocHandler func(params interface{}) []byte
@@ -64,7 +64,7 @@ func (m *muxer) compose(bytes []byte, data ...[]byte) int {
 
 func (m *muxer) mux(ts uint32, end bool, data ...[]byte) {
 	bytes := m.allocHandler(m.params)
-	
+
 	m.header.timestamp = ts
 	//Set mark for the last packet.
 	if m.enableMark {
@@ -84,7 +84,7 @@ func splitIntoRTPSizes(data []byte, size int, callback func(data []byte, start, 
 	length := len(data)
 	tmp := length
 	for tmp > 0 {
-		count := utils.MinInt(tmp, size)
+		count := libbufio.MinInt(tmp, size)
 		callback(data[length-tmp:length-tmp+count], tmp == length, tmp == count)
 		tmp -= count
 	}

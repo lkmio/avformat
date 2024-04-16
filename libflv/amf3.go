@@ -1,6 +1,7 @@
 package libflv
 
 import (
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"math"
 	"time"
@@ -29,7 +30,7 @@ type AMF3Reader struct {
 	objRefTable []string
 }
 
-func (d *AMF3Reader) readU29(buffer utils.ByteBuffer) (int, bool, error) {
+func (d *AMF3Reader) readU29(buffer libbufio.ByteBuffer) (int, bool, error) {
 	var integer int
 	for i := 0; i < 4; i++ {
 		if err := buffer.PeekCount(1); err != nil {
@@ -66,7 +67,7 @@ func (d *AMF3Reader) findObject(index int) (string, error) {
 	return d.objRefTable[index], nil
 }
 
-func (d *AMF3Reader) ReadObjectFromTable(buffer utils.ByteBuffer) (string, int, bool, error) {
+func (d *AMF3Reader) ReadObjectFromTable(buffer libbufio.ByteBuffer) (string, int, bool, error) {
 	u29, ref, err := d.readU29(buffer)
 	if err != nil {
 		return "", -1, false, err
@@ -81,7 +82,7 @@ func (d *AMF3Reader) ReadObjectFromTable(buffer utils.ByteBuffer) (string, int, 
 	return "", u29, false, err
 }
 
-func (d *AMF3Reader) readRef(buffer utils.ByteBuffer, readCache func(int) (string, error)) (string, error) {
+func (d *AMF3Reader) readRef(buffer libbufio.ByteBuffer, readCache func(int) (string, error)) (string, error) {
 	u29, ref, err := d.readU29(buffer)
 	if err != nil {
 		return "", err
@@ -103,7 +104,7 @@ func (d *AMF3Reader) readRef(buffer utils.ByteBuffer, readCache func(int) (strin
 	return string(dst), err
 }
 
-func (d *AMF3Reader) ReadAMF3String(buffer utils.ByteBuffer) (string, error) {
+func (d *AMF3Reader) ReadAMF3String(buffer libbufio.ByteBuffer) (string, error) {
 	str, err := d.readRef(buffer, d.findString)
 	if err != nil {
 		d.strRefTable = append(d.strRefTable, str)
@@ -111,7 +112,7 @@ func (d *AMF3Reader) ReadAMF3String(buffer utils.ByteBuffer) (string, error) {
 	return str, err
 }
 
-func (d *AMF3Reader) ReadAMF3Object(buffer utils.ByteBuffer) (string, error) {
+func (d *AMF3Reader) ReadAMF3Object(buffer libbufio.ByteBuffer) (string, error) {
 	str, err := d.readRef(buffer, d.findObject)
 	if err != nil {
 		d.objRefTable = append(d.objRefTable, str)
@@ -119,7 +120,7 @@ func (d *AMF3Reader) ReadAMF3Object(buffer utils.ByteBuffer) (string, error) {
 	return str, err
 }
 
-func (d *AMF3Reader) ReadAMF3FromBuffer(buffer utils.ByteBuffer) (interface{}, error) {
+func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.ByteBuffer) (interface{}, error) {
 	if err := buffer.PeekCount(1); err != nil {
 		return nil, err
 	}
@@ -202,7 +203,7 @@ func (d *AMF3Reader) ReadAMF3FromBuffer(buffer utils.ByteBuffer) (interface{}, e
 	return nil, nil
 }
 
-func (d *AMF3Reader) DoReadAMF3(buffer utils.ByteBuffer, dst map[string]interface{}) error {
+func (d *AMF3Reader) DoReadAMF3(buffer libbufio.ByteBuffer, dst map[string]interface{}) error {
 	key, err := d.ReadAMF3String(buffer)
 	if err != nil {
 		return err

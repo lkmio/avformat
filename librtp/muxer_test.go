@@ -2,8 +2,8 @@ package librtp
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/libmpeg"
-	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"testing"
 )
@@ -30,7 +30,7 @@ func TestRTPMuxer(t *testing.T) {
 
 	streamIndex := make(map[int]int, 2)
 	count := 0
-	deMuxer := libmpeg.NewDeMuxer(func(buffer utils.ByteBuffer, keyFrame bool, streamType int, pts, dts int64) {
+	deMuxer := libmpeg.NewDeMuxer(func(buffer libbufio.ByteBuffer, keyFrame bool, streamType int, pts, dts int64) {
 		fmt.Printf("count:%d type:%d length:%d keyFrame=%t pts:=%d dts:%d\r\n", count, streamType, buffer.Size(), keyFrame, pts, dts)
 		count++
 		index, ok := streamIndex[streamType]

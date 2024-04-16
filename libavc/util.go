@@ -1,6 +1,9 @@
-package utils
+package libavc
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 var (
 	StartCode3 = []byte{0x00, 0x00, 0x01}
@@ -53,7 +56,7 @@ func FindStartCode2(p []byte) int {
 	}
 }
 
-func FindStartCodeFromBuffer(buffer ByteBuffer, offset int) int {
+func FindStartCodeFromBuffer(buffer libbufio.ByteBuffer, offset int) int {
 	length := buffer.Size()
 	i := offset + 2
 
@@ -102,7 +105,7 @@ func IsKeyFrame(p []byte) bool {
 	}
 }
 
-func IsKeyFrameFromBuffer(buffer ByteBuffer) bool {
+func IsKeyFrameFromBuffer(buffer libbufio.ByteBuffer) bool {
 	index := 0
 	for {
 		index = FindStartCodeFromBuffer(buffer, index)
@@ -154,7 +157,7 @@ func copyNalUWithBytes(dst []byte, data []byte, outSize int, append bool) int {
 			binary.BigEndian.PutUint32(dst[offset:], 0x1)
 			offset += 4
 		} else if startCodeSize != 0 {
-			WriteUInt24(dst[offset:], 0x1)
+			libbufio.WriteUInt24(dst[offset:], 0x1)
 			offset += 3
 		}
 	}
@@ -163,7 +166,7 @@ func copyNalUWithBytes(dst []byte, data []byte, outSize int, append bool) int {
 	return startCodeSize + len(data)
 }
 
-func copyNalU(buffer ByteBuffer, data []byte, outSize int, append bool) int {
+func copyNalU(buffer libbufio.ByteBuffer, data []byte, outSize int, append bool) int {
 	var startCodeSize int
 
 	if append {
@@ -269,7 +272,7 @@ func AnnexB2AVCC(dst []byte, annexB []byte) int {
 	}
 }
 
-func Mp4ToAnnexB(buffer ByteBuffer, data, extra []byte) {
+func Mp4ToAnnexB(buffer libbufio.ByteBuffer, data, extra []byte) {
 	length := len(data)
 	outSize, spsSeen, ppsSeen := 0, false, false
 	for index := 4; index < length; index += 4 {
@@ -299,7 +302,7 @@ func Mp4ToAnnexB(buffer ByteBuffer, data, extra []byte) {
 }
 
 func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
-	buffer := NewByteBuffer(src)
+	buffer := libbufio.NewByteBuffer(src)
 	//unsigned int(8) configurationVersion = 1;
 	//unsigned int(8) AVCProfileIndication;
 	//unsigned int(8) profile_compatibility;
@@ -311,7 +314,7 @@ func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
 	buffer.Skip(4)
 	_ = buffer.ReadUInt8()&0x3 + 1
 	unitNb := buffer.ReadUInt8() & 0x1f
-	dstBuffer := NewByteBuffer()
+	dstBuffer := libbufio.NewByteBuffer()
 	spsDone := 0
 	for unitNb != 0 {
 		unitNb--
@@ -346,13 +349,13 @@ func SplitNalU(data []byte, cb func(nalu []byte)) {
 }
 
 func RemoveStartCode(data []byte) []byte {
-	Assert(data[0] == 0x0 && data[1] == 0x0)
+	//utils.Assert(data[0] == 0x0 && data[1] == 0x0)
 
 	if data[2] == 0x1 {
 		return data[3:]
 	}
 
-	Assert(data[2] == 0x0 && data[3] == 0x1)
+	//utils.Assert(data[2] == 0x0 && data[3] == 0x1)
 	return data[4:]
 }
 

@@ -151,6 +151,7 @@ func init() {
 		utils.AVCodecIdPCMALAW:  {8, "PCMA", utils.AVMediaTypeAudio, utils.AVCodecIdPCMALAW, 8000, 1},
 
 		utils.AVCodecIdH264: {108, "H264", utils.AVMediaTypeVideo, utils.AVCodecIdH264, 90000, 1},
+		utils.AVCodecIdH265: {109, "H265", utils.AVMediaTypeVideo, utils.AVCodecIdH264, 90000, 1},
 		utils.AVCodecIdAAC:  {97, "mpeg4-generic", utils.AVMediaTypeAudio, utils.AVCodecIdAAC, 48000, 1},
 		utils.AVCodecIdOPUS: {111, "OPUS", utils.AVMediaTypeAudio, utils.AVCodecIdOPUS, 48000, 2},
 	}

@@ -1,5 +1,10 @@
 package utils
 
+import (
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/libhevc"
+)
+
 type ExtraType int
 
 const (
@@ -22,22 +27,12 @@ type AVStream interface {
 	M4VCExtraData() ([]byte, error)
 
 	AnnexBExtraData() ([]byte, error)
+
+	CodecParameters() CodecData
 }
 
-type VideoStream interface {
-	AVStream
-
-	Width() uint
-
-	Height() uint
-}
-
-func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, extraType ExtraType) AVStream {
-	return &avStream{type_: type_, index: index, codecId: codecId, data: extra, extraType: extraType}
-}
-
-func NewVideoStream(stream AVStream, width, height uint) AVStream {
-	return &videoStream{stream.(*avStream), width, height}
+func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, extraType ExtraType, config CodecData) AVStream {
+	return &avStream{type_: type_, index: index, codecId: codecId, data: extra, extraType: extraType, codecParameters: config}
 }
 
 type avStream struct {
@@ -56,6 +51,8 @@ type avStream struct {
 	extraM4CVSize int
 
 	extraType ExtraType
+
+	codecParameters CodecData
 }
 
 func (a *avStream) Index() int {
@@ -97,28 +94,27 @@ func (a *avStream) AnnexBExtraData() ([]byte, error) {
 		return a.extraAnnexB[:a.extraAnnexBSize], nil
 	}
 
-	b, err := M4VCExtraDataToAnnexB(a.data)
-	if err != nil {
-		return nil, err
+	if AVCodecIdH264 == a.codecId {
+		b, err := libavc.M4VCExtraDataToAnnexB(a.data)
+		if err != nil {
+			return nil, err
+		}
+
+		a.extraAnnexB = b
+	} else if AVCodecIdH265 == a.codecId {
+		b, _, err := libhevc.ExtraDataToAnnexB(a.data)
+		if err != nil {
+			return nil, err
+		}
+
+		a.extraAnnexB = b
 	}
 
-	a.extraAnnexB = b
-	a.extraAnnexBSize = len(b)
+	a.extraAnnexBSize = len(a.extraAnnexB)
 
 	return a.extraAnnexB[:a.extraAnnexBSize], nil
 }
 
-type videoStream struct {
-	*avStream
-
-	width  uint
-	height uint
-}
-
-func (v *videoStream) Width() uint {
-	return v.width
-}
-
-func (v *videoStream) Height() uint {
-	return v.height
+func (a *avStream) CodecParameters() CodecData {
+	return a.codecParameters
 }

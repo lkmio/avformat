@@ -3,16 +3,18 @@ package libflv
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
 )
 
 type TagType byte
-type VideoCodecId byte
+type VideoCodecId uint32
 type SoundFormat byte
 type SoundRate byte
-
 type TSMode byte
+
+type PacketType byte
 
 const (
 	TagTypeAudioData        = TagType(8)
@@ -25,6 +27,10 @@ const (
 	VideoCodeIdVP6Alpha = VideoCodecId(5)
 	VideoCodeIdScreenV2 = VideoCodecId(6)
 	VideoCodeIdH264     = VideoCodecId(7)
+
+	VideoCodeIdAV1  = VideoCodecId(1635135537)
+	VideoCodeIdVP9  = VideoCodecId(1987063865)
+	VideoCodeIdHEVC = VideoCodecId(1752589105)
 
 	SoundFormatMP3   = SoundFormat(2)
 	SoundFormatG711A = SoundFormat(7)
@@ -42,6 +48,15 @@ const (
 
 	AACFrameSize = 1024
 	MP3FrameSize = 1152
+
+	PacketTypeSequenceStart        = PacketType(0) //新的视频序列开始
+	PacketTypeCodedFrames          = PacketType(1)
+	PacketTypeSequenceEnd          = PacketType(2) //新的视频序列结束
+	PacketTypeCodedFramesX         = PacketType(3) //不包含CompositionTime
+	PacketTypeMetaData             = PacketType(4) //元数据,例如:h265中的HDR信息
+	PacketTypeMPEG2TSSequenceStart = PacketType(5)
+
+	TagHeaderSize = 15 //该长度包含preTagSize
 )
 
 type MP3Header uint32
@@ -108,13 +123,13 @@ func NewDeMuxer(tsMode TSMode) DeMuxer {
 }
 
 func (d *deMuxer) readScriptDataObject(data []byte) error {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 
 	if err := buffer.PeekCount(1); err != nil {
 		return err
 	}
 
-	metaData, err := DoReadAFM0FromBuffer(buffer)
+	metaData, err := DoReadAMF0FromBuffer(buffer)
 	if err != nil {
 		return err
 	}
@@ -158,11 +173,11 @@ func (d *deMuxer) readHeader(data []byte) error {
 // int data size
 // uint32 timestamp
 func (d *deMuxer) readTag(data []byte) Tag {
-	_ = data[15]
-	timestamp := utils.BytesToUInt24WhitSlice(data[8:])
+	_ = data[TagHeaderSize]
+	timestamp := libbufio.BytesToUInt24(data[8:])
 	timestamp |= uint32(data[11]) << 24
 
-	return Tag{preSize: binary.BigEndian.Uint32(data), type_: TagType(data[4]), dataSize: int(utils.BytesToUInt24WhitSlice(data[5:])), timestamp: timestamp}
+	return Tag{preSize: binary.BigEndian.Uint32(data), type_: TagType(data[4]), dataSize: int(libbufio.BytesToUInt24(data[5:])), timestamp: timestamp}
 }
 
 func (d *deMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
@@ -200,7 +215,7 @@ func (d *deMuxer) Input(data []byte) (int, error) {
 	//读取未解析完的Tag
 	need := d.tag.dataSize - d.tag.size
 	if need > 0 {
-		min := utils.MinInt(len(data), need)
+		min := libbufio.MinInt(len(data), need)
 		copy(d.tag.data[d.tag.size:], data[:min])
 		d.tag.size += min
 		n = min
@@ -218,9 +233,9 @@ func (d *deMuxer) Input(data []byte) (int, error) {
 		d.tag.dataSize = 0
 	}
 
-	for len(data[n:]) > 15 {
+	for len(data[n:]) > TagHeaderSize {
 		tag := d.readTag(data[n:])
-		n += 15
+		n += TagHeaderSize
 
 		//数据不够，保存起，等下次
 		if len(data[n:]) < tag.dataSize {
@@ -254,6 +269,8 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 	n, sequenceHeader, key, codecId, ct, err := ParseVideoData(data)
 	if err != nil {
 		return err
+	} else if utils.AVCodecIdNONE == codecId {
+		return nil
 	}
 
 	if sequenceHeader {
@@ -268,26 +285,26 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			d.videoIndex = 1
 		}
 
-		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC)
-		extraData, err := stream.AnnexBExtraData()
-		if err != nil {
-			return err
-		}
-
-		err = fmt.Errorf("failed to parse SPS info")
-		sps := utils.SPSInfo{}
-		utils.SplitNalU(extraData, func(nalu []byte) {
-			bytes := utils.RemoveStartCode(nalu)
-			if utils.H264NalSPS == bytes[0]&0x1F {
-				sps, err = utils.ParseSPS(bytes)
+		var config utils.CodecData
+		if utils.AVCodecIdH264 == codecId {
+			self, err := utils.ParseAVCDecoderConfigurationRecord(data[n:])
+			if err != nil {
+				return err
 			}
-		})
 
-		if err != nil {
-			return err
+			config = self
+		} else if utils.AVCodecIdH265 == codecId {
+			self, err := utils.ParseHEVCDecoderConfigurationRecord(data[n:])
+			if err != nil {
+				return err
+			}
+
+			config = self
 		}
 
-		d.videoStream = utils.NewVideoStream(stream, sps.Width, sps.Height)
+		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC, config)
+		d.videoStream = stream
+
 		d.Handler.OnDeMuxStream(d.videoStream)
 		if d.audioIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
@@ -333,10 +350,10 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 
 		var audioStream utils.AVStream
 		if utils.AVCodecIdAAC == codecId && sequenceHeader {
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE, nil)
 			n = len(data)
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE)
 		} else {
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, utils.ExtraTypeNONE)
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, utils.ExtraTypeNONE, nil)
 		}
 
 		d.audioStream = audioStream
@@ -410,6 +427,12 @@ func ParseAudioData(data []byte) (int, bool, utils.AVCodecID, error) {
 	return -1, false, utils.AVCodecIdNONE, fmt.Errorf("the codec %d is currently not supported in FLV", soundFormat)
 }
 
+// ParseVideoData 解析视频数据
+// @return int 本次解析了多长字节数
+// @return bool 是否是SequenceHeader
+// @return bool 是否是关键帧
+// @return utils.AVCodecID 视频编码ID
+// @return int CompositionTime
 func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) {
 	if len(data) < 6 {
 		return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("invaild data")
@@ -418,9 +441,13 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 	frameType := data[0] >> 4
 	codeId := data[0] & 0xF
 
+	if frameType == 5 {
+		return 0, false, false, utils.AVCodecIdNONE, 0, nil
+	}
+
 	if byte(VideoCodeIdH264) == codeId {
 		pktType := data[1]
-		ct := utils.BytesToUInt24(data[2], data[3], data[4])
+		ct := libbufio.BytesToUInt24(data[2:])
 
 		return 5, pktType == 0, frameType == 1, utils.AVCodecIdH264, int(ct), nil
 	} else if byte(VideoCodeIdH263) == codeId {
@@ -429,6 +456,41 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 		pktType := 1
 		ct := 0
 		return 0, pktType == 0, frameType == 1, utils.AVCodecIdH263, int(ct), nil
+	} else if int(frameType)&0b1000 != 0 {
+		pktType := PacketType(codeId)
+		if PacketTypeMetaData != pktType {
+			frameType &= 0x7
+		}
+
+		fourCC := binary.BigEndian.Uint32(data[1:])
+		var ct int
+		n := 5
+
+		if uint32(VideoCodeIdAV1) == fourCC {
+
+		} else if uint32(VideoCodeIdVP9) == fourCC {
+
+		} else if uint32(VideoCodeIdHEVC) == fourCC {
+			if PacketTypeSequenceStart == pktType {
+			} else if PacketTypeCodedFrames == pktType || PacketTypeCodedFramesX == pktType {
+				if PacketTypeCodedFrames == pktType {
+					ct = int(libbufio.BytesToUInt24(data[5:]))
+					n += 3
+				}
+			} else if PacketTypeMetaData == pktType {
+				if _, err := DoReadAMF0(data[5:]); err != nil {
+					return 0, false, false, 0, 0, err
+				}
+
+				return 0, false, false, utils.AVCodecIdNONE, 0, nil
+			} else if PacketTypeSequenceEnd == pktType {
+
+			}
+		} else {
+			return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("unknow codec:%s", string(data[1:5]))
+		}
+
+		return n, pktType == 0, frameType == 1, utils.AVCodecIdH265, ct, nil
 	}
 
 	return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("the codec %d is currently not supported in FLV", codeId)

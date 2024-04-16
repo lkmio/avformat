@@ -3,6 +3,7 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/libflv"
 	"github.com/yangjiechina/avformat/utils"
 	"math/rand"
@@ -504,7 +505,7 @@ func (p *Puller) processUserControlMessage(event UserControlMessageEvent, value 
 func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int) error {
 	switch typeId {
 	case MessageTypeIDSetChunkSize:
-		p.chunkSize = utils.BytesToInt(data)
+		p.chunkSize = libbufio.BytesToInt(data)
 		break
 	case MessageTypeIDAbortMessage:
 		break
@@ -516,7 +517,7 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 		p.processUserControlMessage(UserControlMessageEvent(event), value)
 		break
 	case MessageTypeIDWindowAcknowledgementSize:
-		p.windowSize = utils.BytesToInt(data)
+		p.windowSize = libbufio.BytesToInt(data)
 		break
 	case MessageTypeIDSetPeerBandWith:
 		p.bandwidth = int(binary.BigEndian.Uint32(data))
@@ -535,7 +536,7 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 	case MessageTypeIDDataAMF3:
 		break
 	case MessageTypeIDDataAMF0, MessageTypeIDCommandAMF0, MessageTypeIDSharedObjectAMF0:
-		if amf0, err := libflv.DoReadAFM0(data); err != nil {
+		if amf0, err := libflv.DoReadAMF0(data); err != nil {
 			return err
 		} else {
 			l := len(amf0)
@@ -573,7 +574,7 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 func (p *Puller) sendMessage(header Chunk, payload []byte) {
 	length, index := len(payload), 0
 	for length > 0 {
-		minInt := utils.MinInt(p.chunkSize, length)
+		minInt := libbufio.MinInt(p.chunkSize, length)
 		if length != len(payload) {
 			header.type_ = ChunkType3
 		}

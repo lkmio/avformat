@@ -3,6 +3,7 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"net"
 
 	"github.com/yangjiechina/avformat/libflv"
@@ -46,7 +47,7 @@ type OnPublishHandler interface {
 }
 
 type Stack struct {
-	buffer         utils.ByteBuffer
+	buffer         libbufio.ByteBuffer
 	handshakeState HandshakeState
 	parser         *Parser
 
@@ -124,7 +125,7 @@ func (s *Stack) Input(conn net.Conn, data []byte) error {
 	tmp := data
 
 	if s.handshakeBufferSize > 0 {
-		min := utils.MinInt(len(data), MaxHandshakeBufferSize-s.handshakeBufferSize)
+		min := libbufio.MinInt(len(data), MaxHandshakeBufferSize-s.handshakeBufferSize)
 		copy(s.handshakeBuffer[s.handshakeBufferSize:], data[:min])
 		tmp = s.handshakeBuffer
 		s.handshakeBufferSize = 0
@@ -238,7 +239,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 		break
 	case MessageTypeIDDataAMF0:
 		//onMetaData
-		amf0, err := libflv.DoReadAFM0(chunk.data[:chunk.size])
+		amf0, err := libflv.DoReadAMF0(chunk.data[:chunk.size])
 		if err != nil {
 			return err
 		}
@@ -258,7 +259,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 	case MessageTypeIDDataAMF3:
 		break
 	case MessageTypeIDCommandAMF0, MessageTypeIDSharedObjectAMF0:
-		amf0, err := libflv.DoReadAFM0(chunk.data[:chunk.size])
+		amf0, err := libflv.DoReadAMF0(chunk.data[:chunk.size])
 		if err != nil {
 			return err
 		}

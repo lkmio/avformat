@@ -1,4 +1,4 @@
-package utils
+package libavc
 
 const (
 	H264NalUnspecified         = 0

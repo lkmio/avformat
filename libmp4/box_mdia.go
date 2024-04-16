@@ -2,6 +2,7 @@ package libmp4
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -77,7 +78,7 @@ type sampleTableBox struct {
 }
 
 func parseMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	mdhd := mediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -106,7 +107,7 @@ func parseMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseHandlerReferenceBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	hdlr := handlerReferenceBox{fullBox: fullBox{version: version, flags: flags}}
@@ -119,7 +120,7 @@ func parseHandlerReferenceBox(ctx *deMuxContext, data []byte) (box, int, error) 
 }
 
 func parseExtendedLanguageBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	elng := extendedLanguageBox{fullBox: fullBox{version: version, flags: flags}}
@@ -128,7 +129,7 @@ func parseExtendedLanguageBox(ctx *deMuxContext, data []byte) (box, int, error) 
 }
 
 func parseMediaInformationBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	size := buffer.ReadUInt32()
 	buffer.ReadUInt32()
 	name := string(data[4:8])

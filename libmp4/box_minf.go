@@ -1,6 +1,8 @@
 package libmp4
 
-import "github.com/yangjiechina/avformat/utils"
+import (
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 /*
 *
@@ -109,7 +111,7 @@ type dataEntryUrnBox struct {
 }
 
 func parseVideoMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	vmhd := videoMediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -121,7 +123,7 @@ func parseVideoMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) 
 }
 
 func parseSoundMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	smhd := soundMediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -130,7 +132,7 @@ func parseSoundMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) 
 }
 
 func parseHintMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	hmhd := hintMediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -142,7 +144,7 @@ func parseHintMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseSubtitleMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	sthd := subtitleMediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -150,7 +152,7 @@ func parseSubtitleMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, erro
 }
 
 func parseNullMediaHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	nmhd := nullMediaHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -166,7 +168,7 @@ func parseDataReferenceBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseDataEntryUrlBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	url := dataEntryUrlBox{fullBox: fullBox{version: version, flags: flags}}
@@ -175,7 +177,7 @@ func parseDataEntryUrlBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseDataEntryUrnBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	url := dataEntryUrnBox{fullBox: fullBox{version: version, flags: flags}}

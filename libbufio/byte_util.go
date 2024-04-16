@@ -1,4 +1,4 @@
-package utils
+package libbufio
 
 /**
 全都大端子序
@@ -36,11 +36,11 @@ func BytesToUInt16(b1, b2 byte) uint16 {
 	return uint16(b1)<<8 | uint16(b2)
 }
 
-func BytesToUInt24(b1, b2, b3 byte) uint32 {
+func UInt24(b1, b2, b3 byte) uint32 {
 	return (uint32(b1) << 16) | (uint32(b2) << 8) | uint32(b3)
 }
 
-func BytesToUInt24WhitSlice(data []byte) uint32 {
+func BytesToUInt24(data []byte) uint32 {
 	return (uint32(data[0]) << 16) | (uint32(data[1]) << 8) | uint32(data[2])
 }
 

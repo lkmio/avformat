@@ -2,7 +2,7 @@ package libmpeg
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
 	"math"
 )
 
@@ -135,10 +135,10 @@ func (r *Muxer) Input(index int, keyFrame bool, data []byte, pts, dts int64) {
 	length := len(data)
 	pesCount := int(math.Ceil(float64(length) / pesPacketSize))
 	for j := 0; j < pesCount; j++ {
-		size := utils.MinInt(length, pesPacketSize)
+		size := libbufio.MinInt(length, pesPacketSize)
 		n = s.pesPacket.ToBytes(r.buffer[i:])
 
-		utils.WriteWORD(r.buffer[i+4:], uint16(size+n-6))
+		libbufio.WriteWORD(r.buffer[i+4:], uint16(size+n-6))
 		i += n
 		copy(r.buffer[i:], data[j*pesPacketSize:j*pesPacketSize+size])
 		i += size

@@ -3,6 +3,7 @@ package libmpeg
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -84,7 +85,7 @@ type PacketHeader struct {
 }
 
 func (h *PacketHeader) ToBytes(dst []byte) int {
-	utils.WriteDWORD(dst, PacketStartCode)
+	libbufio.WriteDWORD(dst, PacketStartCode)
 	//2bits 01
 	dst[4] = 0x40
 	//3bits [32..30]
@@ -263,7 +264,7 @@ func readSystemHeader(header *SystemHeader, src []byte) int {
 }
 
 func (h *SystemHeader) ToBytes(dst []byte) int {
-	utils.WriteDWORD(dst, SystemHeaderStartCode)
+	libbufio.WriteDWORD(dst, SystemHeaderStartCode)
 	dst[6] = 0x80
 	dst[6] = dst[6] | byte(h.rateBound>>15)
 	dst[7] = byte(h.rateBound >> 7)
@@ -288,7 +289,7 @@ func (h *SystemHeader) ToBytes(dst []byte) int {
 		offset += (i + 1) * 3
 	}
 
-	utils.WriteWORD(dst[4:], uint16(offset-6))
+	libbufio.WriteWORD(dst[4:], uint16(offset-6))
 	return offset
 }
 
@@ -380,7 +381,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	if length < 16 {
 		return 0, nil
 	}
-	totalLength := 6 + int(utils.BytesToUInt16(src[4], src[5]))
+	totalLength := 6 + int(libbufio.BytesToUInt16(src[4], src[5]))
 	if totalLength > length {
 		return 0, nil
 	}
@@ -389,7 +390,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	header.currentNextIndicator = src[6] >> 7
 	header.version = src[6] & 0x1F
 
-	infoLength := int(utils.BytesToUInt16(src[8], src[9]))
+	infoLength := int(libbufio.BytesToUInt16(src[8], src[9]))
 	offset := 10
 	if infoLength > 0 {
 		// +2 reserved elementary_stream_map_length
@@ -401,14 +402,14 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 		header.info = src[10:offset]
 	}
 
-	elementaryLength := int(utils.BytesToUInt16(src[offset], src[offset+1]))
+	elementaryLength := int(libbufio.BytesToUInt16(src[offset], src[offset+1]))
 	offset += 2
 	if offset+elementaryLength > totalLength-4 {
 		return 0, fmt.Errorf("bad bytes:%s", hex.EncodeToString(src))
 	}
 
 	for i := offset; i < offset+elementaryLength; i += 4 {
-		eInfoLength := int(utils.BytesToUInt16(src[i+2], src[i+3]))
+		eInfoLength := int(libbufio.BytesToUInt16(src[i+2], src[i+3]))
 
 		if _, ok := header.findElementaryStream(src[i+1]); !ok {
 			element := ElementaryStream{}
@@ -429,13 +430,13 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 		i += eInfoLength
 	}
 
-	header.crc32 = utils.BytesToUInt32(src[totalLength-4], src[totalLength-3], src[totalLength-2], src[totalLength-1])
+	header.crc32 = libbufio.BytesToUInt32(src[totalLength-4], src[totalLength-3], src[totalLength-2], src[totalLength-1])
 
 	return totalLength, nil
 }
 
 func (h *ProgramStreamMap) ToBytes(dst []byte) int {
-	utils.WriteDWORD(dst, PSMStartCode)
+	libbufio.WriteDWORD(dst, PSMStartCode)
 	//current_next_indicator
 	dst[6] = 0x80
 	//reserved
@@ -451,10 +452,10 @@ func (h *ProgramStreamMap) ToBytes(dst []byte) int {
 	if h.info != nil {
 		length := len(h.info)
 		copy(dst[offset:], h.info)
-		utils.WriteWORD(dst[8:], uint16(length))
+		libbufio.WriteWORD(dst[8:], uint16(length))
 		offset += length
 	} else {
-		utils.WriteWORD(dst[8:], 0)
+		libbufio.WriteWORD(dst[8:], 0)
 	}
 	//elementary length
 	offset += 2
@@ -467,21 +468,21 @@ func (h *ProgramStreamMap) ToBytes(dst []byte) int {
 		if elementaryStream.info != nil {
 			length := len(elementaryStream.info)
 			copy(dst[offset:], elementaryStream.info)
-			utils.WriteWORD(dst[offset-2:], uint16(length))
+			libbufio.WriteWORD(dst[offset-2:], uint16(length))
 			offset += length
 		} else {
-			utils.WriteWORD(dst[offset-2:], 0)
+			libbufio.WriteWORD(dst[offset-2:], 0)
 		}
 	}
 
 	elementaryLength := offset - temp
-	utils.WriteWORD(dst[temp-2:], uint16(elementaryLength))
+	libbufio.WriteWORD(dst[temp-2:], uint16(elementaryLength))
 
 	crc32 := utils.CalculateCrcMpeg2(dst[:offset])
-	utils.WriteDWORD(dst[offset:], crc32)
+	libbufio.WriteDWORD(dst[offset:], crc32)
 
 	offset += 4
-	utils.WriteWORD(dst[4:], uint16(offset-6))
+	libbufio.WriteWORD(dst[4:], uint16(offset-6))
 
 	return offset
 }

@@ -4,7 +4,7 @@ package libflv
 //@https://rtmp.veriskope.com/pdf/amf0-file-format-specification.pdf
 
 import (
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
 	"math"
 )
 
@@ -31,7 +31,7 @@ const (
 	AMF0DataTypeSwitchTOAMF3 = dataType(0x11)
 )
 
-func ReadAMF0String(buffer utils.ByteBuffer) (string, error) {
+func ReadAMF0String(buffer libbufio.ByteBuffer) (string, error) {
 	if err := buffer.PeekCount(2); err != nil {
 		return "", err
 	}
@@ -42,7 +42,7 @@ func ReadAMF0String(buffer utils.ByteBuffer) (string, error) {
 	return string(buffer.ReadBytesWithShallowCopy(count)), nil
 }
 
-func ReadAMF0LongString(buffer utils.ByteBuffer) (string, error) {
+func ReadAMF0LongString(buffer libbufio.ByteBuffer) (string, error) {
 	if err := buffer.PeekCount(4); err != nil {
 		return "", err
 	}
@@ -53,7 +53,7 @@ func ReadAMF0LongString(buffer utils.ByteBuffer) (string, error) {
 	return string(buffer.ReadBytesWithShallowCopy(count)), nil
 }
 
-func ReadAMF0(buffer utils.ByteBuffer) (interface{}, error) {
+func ReadAMF0(buffer libbufio.ByteBuffer) (interface{}, error) {
 	if err := buffer.PeekCount(1); err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func ReadAMF0(buffer utils.ByteBuffer) (interface{}, error) {
 	return nil, nil
 }
 
-func DoReadAFM0FromBuffer(buffer utils.ByteBuffer) ([]interface{}, error) {
+func DoReadAMF0FromBuffer(buffer libbufio.ByteBuffer) ([]interface{}, error) {
 
 	var result []interface{}
 	for buffer.ReadableBytes() > 3 {
@@ -169,6 +169,6 @@ func DoReadAFM0FromBuffer(buffer utils.ByteBuffer) ([]interface{}, error) {
 	return result, nil
 }
 
-func DoReadAFM0(data []byte) ([]interface{}, error) {
-	return DoReadAFM0FromBuffer(utils.NewByteBuffer(data))
+func DoReadAMF0(data []byte) ([]interface{}, error) {
+	return DoReadAMF0FromBuffer(libbufio.NewByteBuffer(data))
 }

@@ -1,6 +1,8 @@
 package libmp4
 
-import "github.com/yangjiechina/avformat/utils"
+import (
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 /*
 *
@@ -111,7 +113,7 @@ type mediaBox struct {
 }
 
 func parseTrackHeaderBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	tkhd := trackHeaderBox{fullBox: fullBox{version: version, flags: flags}}
@@ -148,7 +150,7 @@ func parseTrackReferenceBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseTrackReferenceTypeBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	trefType := trackReferenceTypeBox{}
 	trefType.referenceType = buffer.ReadUInt32()
 
@@ -165,7 +167,7 @@ func parseTrackGroupBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseTrackGroupTypeBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	trgr := trackGroupTypeBox{fullBox: fullBox{version: version, flags: flags}}
@@ -179,7 +181,7 @@ func parseEditBox(ctx *deMuxContext, data []byte) (box, int, error) {
 }
 
 func parseEditListBox(ctx *deMuxContext, data []byte) (box, int, error) {
-	buffer := utils.NewByteBuffer(data)
+	buffer := libbufio.NewByteBuffer(data)
 	version := buffer.ReadUInt8()
 	flags := buffer.ReadUInt24()
 	elst := editListBox{fullBox: fullBox{version: version, flags: flags}}

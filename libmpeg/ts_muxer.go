@@ -2,6 +2,7 @@ package libmpeg
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"math"
 )
@@ -192,7 +193,7 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 
 			if index < len(pkt) {
 				remainCount := len(pkt[index:])
-				minInt := utils.MinInt(remainCount, pktSize)
+				minInt := libbufio.MinInt(remainCount, pktSize)
 				copy(bytes[TsPacketSize-pktSize:], pkt[index:index+minInt])
 				remain -= minInt
 				pktSize -= minInt

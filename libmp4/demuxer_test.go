@@ -1,6 +1,7 @@
 package libmp4
 
 import (
+	"github.com/yangjiechina/avformat/libavc"
 	"github.com/yangjiechina/avformat/libhevc"
 	"github.com/yangjiechina/avformat/utils"
 	"os"
@@ -43,7 +44,7 @@ func TestMp4DeMuxer(t *testing.T) {
 	muxer := NewDeMuxer(func(data []byte, pts, dts int64, mediaType utils.AVMediaType, id utils.AVCodecID) {
 		switch id {
 		case utils.AVCodecIdH264:
-			utils.Mp4ToAnnexB(convertBuffer, data, videoTrack.MetaData().ExtraData())
+			libavc.Mp4ToAnnexB(convertBuffer, data, videoTrack.MetaData().ExtraData())
 			convertBuffer.ReadTo(func(bytes []byte) {
 				h264File.Write(bytes)
 			})

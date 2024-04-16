@@ -2,7 +2,7 @@ package libmp4
 
 import (
 	"encoding/binary"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/yangjiechina/avformat/libbufio"
 )
 
 type reader struct {
@@ -22,7 +22,7 @@ func (r *reader) nextSize() int64 {
 		return -1
 	}
 
-	size := int64(utils.BytesToUInt32(r.data[r.offset], r.data[r.offset+1], r.data[r.offset+2], r.data[r.offset+3]))
+	size := int64(libbufio.BytesToUInt32(r.data[r.offset], r.data[r.offset+1], r.data[r.offset+2], r.data[r.offset+3]))
 	r.isLargeSize = size == 1
 	if size == 0 {
 		return 0

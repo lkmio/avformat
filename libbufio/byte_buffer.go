@@ -1,4 +1,4 @@
-package utils
+package libbufio
 
 import "fmt"
 
@@ -232,7 +232,7 @@ func (b *byteBuffer) PeekUInt16() uint16 {
 }
 
 func (b *byteBuffer) PeekUInt24() uint32 {
-	return BytesToUInt24(b.At(b.readOffset), b.At(b.readOffset+1), b.At(b.readOffset+2))
+	return UInt24(b.At(b.readOffset), b.At(b.readOffset+1), b.At(b.readOffset+2))
 }
 
 func (b *byteBuffer) PeekUInt32() uint32 {

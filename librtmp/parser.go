@@ -2,8 +2,8 @@ package librtmp
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/stream"
-	"github.com/yangjiechina/avformat/utils"
 )
 
 type Parser struct {
@@ -160,15 +160,15 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			}
 
 			need := p.chunk.Length - p.chunk.size
-			consume := utils.MinInt(need, p.chunkSize-(p.chunk.size%p.chunkSize))
-			consume = utils.MinInt(consume, rest)
+			consume := libbufio.MinInt(need, p.chunkSize-(p.chunk.size%p.chunkSize))
+			consume = libbufio.MinInt(consume, rest)
 
 			if (MessageTypeIDAudio == p.chunk.tid || MessageTypeIDVideo == p.chunk.tid) && p.handler != nil {
 				p.handler.OnPartPacket(int(p.chunk.tid)%8, data[i:i+consume], true)
 			} else {
 				if len(p.chunk.data) < p.chunk.Length {
 					bytes := make([]byte, p.chunk.Length+1024)
-					copy(bytes, p.chunk.data)
+					copy(bytes, p.chunk.data[:p.chunk.size])
 					p.chunk.data = bytes
 				}
 

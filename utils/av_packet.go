@@ -1,5 +1,10 @@
 package utils
 
+import (
+	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/libhevc"
+)
+
 type PacketType byte
 
 const (
@@ -23,9 +28,11 @@ type AVPacket interface {
 
 	CodecId() AVCodecID //冗余编码器Id
 
-	AnnexBPacketData() []byte
+	//	AnnexBPacketData() []byte
 
 	AVCCPacketData() []byte
+
+	AnnexBPacketData(stream AVStream) []byte
 
 	Index() int
 
@@ -45,8 +52,8 @@ type avPacket struct {
 	dataAnnexB     []byte
 	dataAnnexBSize int
 
-	dts      int64
 	pts      int64
+	dts      int64
 	duration int64
 	key      bool
 
@@ -111,8 +118,7 @@ func (pkt *avPacket) CodecId() AVCodecID {
 	return pkt.codecId
 }
 
-func (pkt *avPacket) AnnexBPacketData() []byte {
-	Assert(AVMediaTypeVideo == pkt.mediaType)
+func (pkt *avPacket) AnnexBPacketData(stream AVStream) []byte {
 	if PacketTypeAnnexB == pkt.packetType {
 		return pkt.data
 	}
@@ -122,7 +128,19 @@ func (pkt *avPacket) AnnexBPacketData() []byte {
 	}
 
 	bytes := make([]byte, len(pkt.data)+64)
-	n := AVCC2AnnexB(bytes, pkt.data, nil)
+	var n int
+	if AVCodecIdH264 == pkt.codecId {
+		n = libavc.AVCC2AnnexB(bytes, pkt.data, nil)
+	} else if AVCodecIdH265 == pkt.codecId {
+		var err error
+
+		lengthSize := stream.CodecParameters().DecoderConfRecord().LengthSize()
+		n, err = libhevc.Mp4ToAnnexB(bytes, pkt.data, nil, int(lengthSize))
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	pkt.dataAnnexB = bytes
 	pkt.dataAnnexBSize = n
 
@@ -141,7 +159,7 @@ func (pkt *avPacket) AVCCPacketData() []byte {
 	}
 
 	bytes := make([]byte, len(pkt.data)+64)
-	n := AnnexB2AVCC(bytes, pkt.data)
+	n := libavc.AnnexB2AVCC(bytes, pkt.data)
 	pkt.dataAVCC = bytes
 	pkt.dataAVCCSize = n
 

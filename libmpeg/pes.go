@@ -1,6 +1,8 @@
 package libmpeg
 
-import "github.com/yangjiechina/avformat/utils"
+import (
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 const (
 	StreamIdPrivateStream1 = 0xBD
@@ -153,7 +155,7 @@ func readPESHeader(p *PESHeader, src []byte) int {
 	}
 
 	p.streamId = src[3]
-	p.packetLength = utils.BytesToUInt16(src[4], src[5])
+	p.packetLength = libbufio.BytesToUInt16(src[4], src[5])
 	//1011 1100 1 program_stream_map
 	//1011 1101 2 private_stream_1
 	//1011 1110 padding_stream
