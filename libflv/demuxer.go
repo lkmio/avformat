@@ -286,15 +286,17 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 		}
 
 		var config utils.CodecData
+		extraData := make([]byte, len(data[n:]))
+		copy(extraData, data[n:])
 		if utils.AVCodecIdH264 == codecId {
-			self, err := utils.ParseAVCDecoderConfigurationRecord(data[n:])
+			self, err := utils.ParseAVCDecoderConfigurationRecord(extraData)
 			if err != nil {
 				return err
 			}
 
 			config = self
 		} else if utils.AVCodecIdH265 == codecId {
-			self, err := utils.ParseHEVCDecoderConfigurationRecord(data[n:])
+			self, err := utils.ParseHEVCDecoderConfigurationRecord(extraData)
 			if err != nil {
 				return err
 			}
@@ -302,7 +304,7 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			config = self
 		}
 
-		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, data[n:], utils.ExtraTypeM4VC, config)
+		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, extraData, utils.ExtraTypeM4VC, config)
 		d.videoStream = stream
 
 		d.Handler.OnDeMuxStream(d.videoStream)

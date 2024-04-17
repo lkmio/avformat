@@ -25,9 +25,9 @@ type Muxer interface {
 }
 
 type muxer struct {
-	header       *Header
-	headerLength int
-	payloadSize  int
+	header         *Header
+	headerLength   int
+	maxPayloadSize int //单个rtp包最大负载数据大小
 
 	//是否使用mark标记位
 	enableMark bool
@@ -80,7 +80,7 @@ func (m *muxer) mux(ts uint32, end bool, data ...[]byte) {
 }
 
 // 按照指定大小分割负载数据, 如果start和end都为true, 说明len(data) < size
-func splitIntoRTPSizes(data []byte, size int, callback func(data []byte, start, end bool)) {
+func splitPayloadData(data []byte, size int, callback func(data []byte, start, end bool)) {
 	length := len(data)
 	tmp := length
 	for tmp > 0 {
@@ -92,7 +92,7 @@ func splitIntoRTPSizes(data []byte, size int, callback func(data []byte, start, 
 
 func (m *muxer) Input(data []byte, timestamp uint32) {
 	m.header.timestamp = timestamp
-	splitIntoRTPSizes(data, m.payloadSize, func(payload []byte, start, end bool) {
+	splitPayloadData(data, m.maxPayloadSize, func(payload []byte, start, end bool) {
 		m.mux(timestamp, end, payload)
 	})
 }
@@ -104,7 +104,7 @@ func (m *muxer) init(payload int, seq int, ssrc uint32) {
 	header.ssrc = ssrc
 	m.header = header
 	m.headerLength = FixedHeaderLength
-	m.payloadSize = PacketMaxSize - m.headerLength
+	m.maxPayloadSize = PacketMaxSize - m.headerLength
 	m.enableMark = true
 }
 
