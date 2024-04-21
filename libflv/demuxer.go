@@ -352,7 +352,9 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 
 		var audioStream utils.AVStream
 		if utils.AVCodecIdAAC == codecId && sequenceHeader {
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, data[n:], utils.ExtraTypeNONE, nil)
+			extraData := make([]byte, len(data[n:]))
+			copy(extraData, data[n:])
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, extraData, utils.ExtraTypeNONE, nil)
 			n = len(data)
 		} else {
 			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, utils.ExtraTypeNONE, nil)
