@@ -113,8 +113,8 @@ func (s *Stack) DoHandshake(conn net.Conn, data []byte) (int, error) {
 			if length-i >= HandshakePacketSize {
 				s.handshakeState = HandshakeStateDone
 				i += HandshakePacketSize
-				break
 			}
+			break
 		}
 	}
 
