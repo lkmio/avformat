@@ -72,6 +72,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 				p.chunk = chunk
 				if p.chunkType < ChunkType3 {
 					p.state = ParserStateTimestamp
+					p.headerOffset = 0
 				} else {
 					p.state = ParserStatePayload
 				}
