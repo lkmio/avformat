@@ -176,7 +176,7 @@ func (m *muxer) WriteAudioData(dst []byte, header bool) int {
 }
 
 func (m *muxer) ComputeVideoDataSize(ct uint32) int {
-	if ct > 0 {
+	if m.videoCodecId > 0xF && ct > 0 {
 		return 8
 	}
 
