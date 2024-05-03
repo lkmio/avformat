@@ -736,6 +736,67 @@ type AVCDecoderConfRecord struct {
 	LengthSizeMinusOne   uint8
 	SPS                  [][]byte
 	PPS                  [][]byte
+
+	M4vcData   []byte
+	AnnexBData []byte
+}
+
+func (self AVCDecoderConfRecord) ToMP4VC() []byte {
+	if self.M4vcData == nil {
+		m4vc := make([]byte, 1024)
+		offset := 6
+
+		for _, sps := range self.SPS {
+			binary.BigEndian.PutUint16(m4vc[offset:], uint16(len(sps)))
+			offset += 2
+			copy(m4vc[offset:], sps)
+			offset += len(sps)
+		}
+
+		for i, pps := range self.PPS {
+			m4vc[offset] = byte(i + 1)
+
+			binary.BigEndian.PutUint16(m4vc[offset:], uint16(len(pps)))
+			offset += 2
+			copy(m4vc[offset:], pps)
+			offset += len(pps)
+		}
+
+		m4vc[0] = 1
+		m4vc[1] = self.SPS[0][3]
+		m4vc[2] = self.SPS[0][4]
+		m4vc[3] = self.SPS[0][5]
+		m4vc[4] = 0xff
+		m4vc[5] = 0xE0 | byte(len(self.SPS))
+
+		self.M4vcData = m4vc[:offset]
+	}
+
+	return self.M4vcData
+}
+
+func (self AVCDecoderConfRecord) ToAnnexB() []byte {
+	if self.AnnexBData == nil {
+		annexBData := make([]byte, 1024)
+		offset := 0
+
+		for _, sps := range self.SPS {
+			binary.BigEndian.PutUint32(annexBData[offset:], 0x1)
+			offset += 4
+			copy(annexBData[offset:], sps)
+			offset += len(sps)
+		}
+
+		for _, pps := range self.PPS {
+			binary.BigEndian.PutUint32(annexBData[offset:], 0x1)
+			copy(annexBData[offset:], pps)
+			offset += len(pps)
+		}
+
+		self.AnnexBData = annexBData[:offset]
+	}
+
+	return self.AnnexBData
 }
 
 func (self AVCDecoderConfRecord) Profile() uint8 {

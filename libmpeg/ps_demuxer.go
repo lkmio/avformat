@@ -1,191 +1,205 @@
 package libmpeg
 
-/*
 import (
-	"bufio"
 	"fmt"
 	"github.com/yangjiechina/avformat/libavc"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
-	"io"
-	"io/ioutil"
-	"os"
 )
 
-type deHandler func(buffer utils.ByteBuffer, keyFrame bool, streamType int, pts, dts int64)
+type esHandler func(data []byte, total int, first bool, mediaType utils.AVMediaType, id utils.AVCodecID,
+	dts int64, pts int64, params interface{}) error
 
-type DeMuxer struct {
-	handler          deHandler
+// PSDeMuxer PS流解复用器
+type PSDeMuxer struct {
+	//内部不做拷贝, 只要解析到es数据就回调出去
+	handler esHandler
+
 	packetHeader     *PacketHeader
 	systemHeader     *SystemHeader
 	programStreamMap *ProgramStreamMap
-	lastPesHeader    *PESHeader
-	currentPesHeader *PESHeader
+	pesHeader        *PESHeader
+	reader           libbufio.BytesReader
 
-	packet     *utils.AVPacket
-	streamType byte
+	//已经读取到的ES流数量
+	esCount   uint16
+	codecId   utils.AVCodecID
+	mediaType utils.AVMediaType
+
+	//外部参数,回调es数据时携带
+	params interface{}
 }
 
-func callbackES(streamId, streamType byte, packet *utils.AVPacket, handler deHandler) {
-	var keyFrame bool
-	switch streamId {
-	case StreamIdAudio:
-		keyFrame = true
-		break
-	case StreamIdVideo, StreamIdH624:
-		keyFrame = libavc.IsKeyFrameFromBuffer(packet.Data())
-		break
-	}
-
-	handler(packet.Data(), keyFrame, int(streamType), packet.Pts(), packet.Dts())
-}
-
-func (d *DeMuxer) Close() {
+func (d *PSDeMuxer) Close() {
 	//回调最后一帧
-	if d.packet.Data().Size() > 0 {
-		callbackES(d.lastPesHeader.streamId, d.streamType, d.packet, d.handler)
-	}
+
 }
 
-//func (d *DeMuxer) callback(streamId byte) {
-//	var keyFrame bool
-//	switch streamId {
-//	case StreamIdAudio:
-//		keyFrame = true
-//		break
-//	case StreamIdVideo, StreamIdH624:
-//		keyFrame = libavc.IsKeyFrameFromBuffer(d.packet.Data())
-//		break
-//	}
-//
-//	d.handler(d.packet.Data(), keyFrame, int(d.streamType), d.packet.Pts(), d.packet.Dts())
-//}
+func (d *PSDeMuxer) SetHandler(handler esHandler) {
+	d.handler = handler
+}
 
-// Input Reference from https://github.com/ireader/media-server/blob/master/libmpeg/source/mpeg-ps-dec.c
-func (d *DeMuxer) Input(data []byte) int {
-	n, i, consume := 0, 0, 0
-	//保存第一个pes的开始位置
-	//每次Input如果没有读取到完整的一帧，回退到第一个pes的位置
-	//内部不做内存拷贝，ByteBuffer只是浅拷贝
-	var firstPesIndex int
+// 读取并解析非pes头
+// @Return int /-1-需要更多数/0-读取到pes头
+func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) (int, error) {
+	for {
+		startCode := libavc.FindStartCodeWithReader(reader)
+		if startCode < 0 {
+			return -1, nil
+		}
+
+		// 将读取位置回退4个字节，因为起始码占用了4个字节
+		_ = reader.SeekBack(4)
+		var n int
+		if startCode == 0xBA {
+			n = readPackHeader(d.packetHeader, reader.Data())
+		} else if startCode == 0xBB {
+			n = readSystemHeader(d.systemHeader, reader.Data())
+		} else if startCode == 0xBC {
+			n, _ = readProgramStreamMap(d.programStreamMap, reader.Data())
+		} else if StreamIdPrivateStream1 == startCode || StreamIdPaddingStream == startCode || StreamIdPrivateStream2 == startCode {
+			//PrivateStream1解析可参考https://github.com/FFmpeg/FFmpeg/blob/release/7.0/libavformat/mpeg.c#L361
+			//PrivateStream2解析可以参考https://github.com/FFmpeg/FFmpeg/blob/release/7.0/libavformat/mpeg.c#L266
+			_ = reader.Seek(4)
+
+			skipCount, err := reader.ReadUint16()
+			if err != nil {
+				//需要更多数据
+				_ = reader.SeekBack(4)
+				return -1, nil
+			} else if reader.Seek(int(skipCount)) != nil {
+				//需要更多数据
+				_ = reader.SeekBack(6)
+				return -1, nil
+			}
+		} else if !((startCode >= 0xc0 && startCode <= 0xdf) || (startCode >= 0xe0 && startCode <= 0xef)) {
+			//查找下一个有效数据
+			_ = reader.Seek(4)
+		} else {
+			//找到pes包
+			break
+		}
+
+		if startCode < 0xBD {
+			if n < 1 {
+				//需要更多数据
+				return -1, nil
+			}
+
+			_ = reader.Seek(n)
+		}
+	}
+
+	return 0, nil
+}
+
+func (d *PSDeMuxer) callbackES(data []byte) error {
 	length := len(data)
-	d.packet.Release()
+	if length == 0 {
+		return nil
+	}
 
-	for i = libavc.FindStartCode(data, 0); i >= 0 && i < length; i = libavc.FindStartCode(data, i) {
-		i -= 3
-		switch data[i+3] {
-		case 0xBA:
-			n = readPackHeader(d.packetHeader, data[i:])
-			break
-		case 0xBB:
-			n = readSystemHeader(d.systemHeader, data[i:])
-			break
-		case 0xBC:
-			n, _ = readProgramStreamMap(d.programStreamMap, data[i:])
-			break
-		case 0xB9: //end code
-			break
-		default:
-			var esPacket []byte
-			if firstPesIndex == 0 {
-				firstPesIndex = i
-			}
+	d.esCount += uint16(length)
+	completed := d.esCount == d.pesHeader.esLength
 
-			n = readPESHeader(d.currentPesHeader, data[i:])
-			if n == 0 || len(data[i:])-n > int(d.currentPesHeader.packetLength-3-uint16(d.currentPesHeader.pesHeaderDataLength)) {
-				goto END
-			}
+	//完善时间戳, 回调要同时包含dts和pts
+	dts := d.pesHeader.dts
+	pts := d.pesHeader.pts
 
-			element, ok := d.programStreamMap.findElementaryStream(data[i+3])
-			if !ok {
-				println(fmt.Sprintf("unknow stream:%x", data[i+3]))
+	//不包含pts使用dts
+	//解析pes头时, 已经确保至少包含一个时间戳
+	if d.pesHeader.ptsDtsFlags>>1 == 0 {
+		pts = dts
+	}
+	//不包含dts使用dts
+	if d.pesHeader.ptsDtsFlags&0x1 == 0 {
+		dts = pts
+	}
+
+	err := d.handler(data, int(d.pesHeader.esLength), d.esCount == uint16(len(data)), d.mediaType, d.codecId, dts, pts, d.params)
+	if completed {
+		d.esCount = 0
+		d.pesHeader.esLength = 0
+	}
+
+	return err
+}
+
+func (d *PSDeMuxer) SetParams(params interface{}) {
+	d.params = params
+}
+
+// 针对视频解析的优化, 如果是pes包的第一个回调, 数据长度小于5不回调. 方便根据nalu解析帧类型
+func (d *PSDeMuxer) needMore(size int) bool {
+	return size < 6 && d.esCount == 0
+}
+
+// Input 确保输入流的连续性, 比如一个视频帧有多个PES包, 多个PES包必须是连续的, 不允许插入非当前帧PES包, 否则解析出来的帧解码时会有问题.
+func (d *PSDeMuxer) Input(data []byte) (int, error) {
+	d.reader.Reset(data)
+
+	for d.reader.ReadableBytes() > 0 {
+		need := d.pesHeader.esLength - d.esCount
+		if need > 0 {
+			consume := libbufio.MinInt(int(need), d.reader.ReadableBytes())
+			if d.needMore(consume) {
 				break
 			}
 
-			if d.lastPesHeader == nil {
-				pesPacket := *d.currentPesHeader
-				d.lastPesHeader = &pesPacket
+			bytes, _ := d.reader.ReadBytes(consume)
+			if err := d.callbackES(bytes); err != nil {
+				return d.reader.ReadableBytes(), err
 			}
-
-			//读到下一包，才回调前一包
-			//上一包和当前包的pts/streamId不一样,才回调
-			if d.currentPesHeader.streamId != d.lastPesHeader.streamId || d.currentPesHeader.pts != d.lastPesHeader.pts {
-				//d.callback(d.lastPesHeader.streamId)
-				callbackES(d.lastPesHeader.streamId, d.streamType, d.packet, d.handler)
-				d.packet.Release()
-				*d.lastPesHeader = *d.currentPesHeader
-				firstPesIndex = i
-			}
-
-			d.streamType = element.streamType
-			if d.currentPesHeader.ptsDtsFlags&0x3 != 0 {
-				d.packet.SetPts(d.currentPesHeader.pts)
-				d.packet.SetDts(d.currentPesHeader.dts)
-			}
-			d.packet.Write(esPacket)
-			d.currentPesHeader.Reset()
+			continue
 		}
 
-		i += n
-		consume = i
+		n, err := d.readHeader(d.reader)
+		if err != nil {
+			return d.reader.Offset(), err
+		} else if n < 0 || len(d.programStreamMap.elementaryStreams) < 1 {
+			break
+		}
+
+		n, err = readPESHeader(d.pesHeader, d.reader.Data())
+		if err != nil {
+			return d.reader.Offset(), err
+		} else if n < 1 {
+			break
+		}
+
+		_ = d.reader.Seek(n)
+		elementaryStream, b := d.programStreamMap.findElementaryStream(d.pesHeader.streamId)
+		if !b {
+			fmt.Printf("unknow stream id:%x \r\n", d.pesHeader.streamId)
+		}
+
+		d.mediaType = utils.AVMediaTypeAudio
+		if elementaryStream.streamType == StreamTypeVideoH264 {
+			d.codecId = utils.AVCodecIdH264
+			d.mediaType = utils.AVMediaTypeVideo
+		} else if elementaryStream.streamType == StreamTypeVideoHEVC {
+			d.codecId = utils.AVCodecIdH265
+			d.mediaType = utils.AVMediaTypeVideo
+		} else if elementaryStream.streamType == StreamTypeAudioAAC {
+			d.codecId = utils.AVCodecIdAAC
+		} else if elementaryStream.streamType == StreamTypeAudioG711A {
+			d.codecId = utils.AVCodecIdPCMALAW
+		} else if elementaryStream.streamType == StreamTypeAudioG711U {
+			d.codecId = utils.AVCodecIdPCMMULAW
+		} else {
+			return -1, fmt.Errorf("the stream type %d is not implemented", elementaryStream.streamType)
+		}
 	}
 
-END:
-	d.currentPesHeader.Reset()
-	if firstPesIndex != 0 {
-		return firstPesIndex
-	} else {
-		return consume
-	}
+	return d.reader.Offset(), nil
 }
 
-// Open 解复用本地文件
-// @readCount 每次读取多少字节. <= 0 一次性读取完
-func (d *DeMuxer) Open(path string, readCount int) error {
-	if readCount <= 0 {
-		all, err := ioutil.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		d.Input(all)
-		return nil
-	} else {
-		fi, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			fi.Close()
-		}()
-
-		reader := bufio.NewReader(fi)
-		offset := 0
-		buffer := make([]byte, readCount)
-
-		for {
-			r, err := reader.Read(buffer[offset:])
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				} else {
-					return err
-				}
-			}
-
-			length := offset + r
-			consume := d.Input(buffer[:length])
-			offset = length - consume
-			copy(buffer, buffer[consume:length])
-		}
-	}
-}
-
-func NewDeMuxer(handler deHandler) *DeMuxer {
-	return &DeMuxer{
-		handler:          handler,
+func NewPSDeMuxer() *PSDeMuxer {
+	return &PSDeMuxer{
 		packetHeader:     &PacketHeader{},
 		systemHeader:     &SystemHeader{},
 		programStreamMap: &ProgramStreamMap{},
-		currentPesHeader: NewPESPacket(),
-		packet:           utils.NewPacket(),
+		pesHeader:        &PESHeader{},
+		reader:           libbufio.NewByteReader(nil),
 	}
-}*/
+}

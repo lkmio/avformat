@@ -35,6 +35,10 @@ type DecoderConfRecord interface {
 	SPSBytes() [][]byte
 
 	PPSBytes() [][]byte
+
+	ToMP4VC() []byte
+
+	ToAnnexB() []byte
 }
 
 type HEVCDecoderConfRecord interface {
@@ -65,6 +69,52 @@ func ParseHEVCDecoderConfigurationRecord(data []byte) (CodecData, error) {
 	}
 
 	return &codecData{data, record, info}, nil
+}
+
+func NewAVCCodecData(sps, pps []byte) (CodecData, error) {
+	recordInfo := libavc.AVCDecoderConfRecord{
+		SPS: make([][]byte, 1),
+		PPS: make([][]byte, 1),
+	}
+	recordInfo.SPS[0] = sps
+	recordInfo.PPS[0] = pps
+
+	spsInfo, err := libavc.ParseSPS(recordInfo.SPS[0])
+	if err != nil {
+		return nil, fmt.Errorf("h264parser: parse SPS failed(%s)", err)
+	}
+
+	data := make([]byte, len(sps)+len(pps))
+	copy(data, sps)
+	copy(data[len(sps):], pps)
+
+	return &codecData{data, recordInfo, spsInfo}, nil
+}
+
+func NewHevcCodecData(vps, sps, pps []byte) (CodecData, error) {
+	recordInfo := libhevc.HEVCDecoderConfRecord{
+		VPS: make([][]byte, 1),
+		AVCDecoderConfRecord: libavc.AVCDecoderConfRecord{
+			SPS: make([][]byte, 1),
+			PPS: make([][]byte, 1),
+		},
+	}
+
+	recordInfo.VPS[0] = vps
+	recordInfo.SPS[0] = sps
+	recordInfo.PPS[0] = pps
+
+	spsInfo, err := libhevc.ParseSPS(recordInfo.SPS[0])
+	if err != nil {
+		return nil, fmt.Errorf("h265parser: parse SPS failed(%s)", err)
+	}
+
+	data := make([]byte, len(vps)+len(sps)+len(pps))
+	copy(data, vps)
+	copy(data[len(vps):], sps)
+	copy(data[len(vps)+len(sps):], pps)
+
+	return &codecData{data, recordInfo, spsInfo}, nil
 }
 
 type codecData struct {

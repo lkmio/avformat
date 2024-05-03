@@ -2,6 +2,7 @@ package libhevc
 
 import (
 	"fmt"
+	"github.com/yangjiechina/avformat/libavc"
 	"github.com/yangjiechina/avformat/libbufio"
 )
 
@@ -17,7 +18,7 @@ func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
 	lengthSize := buffer.ReadUInt8()&3 + 1
 	arrays := int(buffer.ReadUInt8())
 	for i := 0; i < arrays; i++ {
-		t := HEVCNALUnitType(buffer.ReadUInt8() & 0x3F)
+		t := HEVCNALUnitType(buffer.ReadUInt8() >> 1 & 0x3F)
 		count := int(buffer.ReadUInt16())
 		if t != HevcNalVPS && t != HevcNalSPS && t != HevcNalPPS && t != HevcNalSeiPPrefix && t != HevcNalSeiSuffix {
 			return nil, -1, fmt.Errorf("invalid NAL unit type in extradata:%d", t)
@@ -83,4 +84,32 @@ func Mp4ToAnnexB(dst []byte, data, extra []byte, lengthSize int) (int, error) {
 	}
 
 	return n, nil
+}
+
+// ParseExtraDataFromKeyNALU 从关键帧中解析出vps/sps/pss
+func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, []byte, error) {
+	var vps []byte
+	var sps []byte
+	var pps []byte
+
+	libavc.SplitNalU(data, func(nalu []byte) {
+		noStartCodeNALU := libavc.RemoveStartCode(nalu)
+		header := HEVCNALUnitType(noStartCodeNALU[0] >> 1 & 0x3F)
+
+		if header == HevcNalVPS {
+			vps = make([]byte, len(noStartCodeNALU))
+			copy(vps, noStartCodeNALU)
+		} else if header == HevcNalSPS {
+			sps = make([]byte, len(noStartCodeNALU))
+			copy(sps, noStartCodeNALU)
+		} else if header == HevcNalPPS {
+			pps = make([]byte, len(noStartCodeNALU))
+			copy(pps, noStartCodeNALU)
+		}
+	})
+
+	if vps == nil || sps == nil || pps == nil {
+		return nil, nil, nil, fmt.Errorf("not find extra data for H264")
+	}
+	return vps, sps, pps, nil
 }

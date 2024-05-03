@@ -23,12 +23,12 @@ func TestUDPServer(t *testing.T) {
 	handler := &UDPHandler{}
 	transport.SetHandler(handler)
 
-	addr := "0.0.0.0:20000"
+	addr, _ := net.ResolveTCPAddr("udp", "0.0.0.0:20000")
 	if err := transport.Bind(addr); err != nil {
 		panic(err)
 	}
 
-	println("启动UDPServer成功 addr:" + addr)
+	println("启动UDPServer成功 addr:" + addr.String())
 
 	select {}
 }

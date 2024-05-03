@@ -3,7 +3,6 @@ package librtmp
 import (
 	"fmt"
 	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/stream"
 )
 
 type Parser struct {
@@ -18,7 +17,7 @@ type Parser struct {
 	chunks map[ChunkStreamID]*Chunk
 	chunk  *Chunk
 
-	handler stream.OnTransDeMuxerHandler
+	partPacketCB func(data []byte)
 
 	//chunk大小 默认128
 	chunkSize int
@@ -164,8 +163,8 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			consume := libbufio.MinInt(need, p.chunkSize-(p.chunk.size%p.chunkSize))
 			consume = libbufio.MinInt(consume, rest)
 
-			if (MessageTypeIDAudio == p.chunk.tid || MessageTypeIDVideo == p.chunk.tid) && p.handler != nil {
-				p.handler.OnPartPacket(int(p.chunk.tid)%8, data[i:i+consume], true)
+			if (MessageTypeIDAudio == p.chunk.tid || MessageTypeIDVideo == p.chunk.tid) && p.partPacketCB != nil {
+				p.partPacketCB(data[i : i+consume])
 			} else {
 				if len(p.chunk.data) < p.chunk.Length {
 					bytes := make([]byte, p.chunk.Length+1024)

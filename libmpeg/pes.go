@@ -1,7 +1,7 @@
 package libmpeg
 
 import (
-	"github.com/yangjiechina/avformat/libbufio"
+	"encoding/binary"
 )
 
 const (
@@ -35,6 +35,7 @@ type PESHeader struct {
 	pesCrcFlag             byte //1
 	pesExtensionFlag       byte //1
 	pesHeaderDataLength    byte //8
+	esLength               uint16
 
 	escrBase      uint64
 	escrExtension uint16 //9 bits
@@ -148,14 +149,14 @@ func (p *PESHeader) ToBytes(dst []byte) int {
 	return offset
 }
 
-func readPESHeader(p *PESHeader, src []byte) int {
+func readPESHeader(p *PESHeader, src []byte) (int, error) {
 	length := len(src)
 	if length < 9 {
-		return 0
+		return 0, nil
 	}
 
 	p.streamId = src[3]
-	p.packetLength = libbufio.BytesToUInt16(src[4], src[5])
+	p.packetLength = binary.BigEndian.Uint16(src[4:])
 	//1011 1100 1 program_stream_map
 	//1011 1101 2 private_stream_1
 	//1011 1110 padding_stream
@@ -188,9 +189,10 @@ func readPESHeader(p *PESHeader, src []byte) int {
 
 	if p.streamId != 0xBC && p.streamId != 0xBE && p.streamId != 0xBF && p.streamId != 0xF0 && p.streamId != 0xF1 && p.streamId != 0xff && p.streamId != 0xF2 && p.streamId != 0xF8 {
 
-	} else {
+	} /* else {
 		panic("Other unfinished")
-	}
+	}*/
+
 	p.pesScramblingControl = src[6] >> 4 & 0x3
 	p.pesPriority = src[6] >> 3 & 0x1
 	p.dataAlignmentIndicator = src[6] >> 2 & 0x1
@@ -204,28 +206,48 @@ func readPESHeader(p *PESHeader, src []byte) int {
 	p.pesCrcFlag = src[7] >> 1 & 0x1
 	p.pesExtensionFlag = src[7] & 0x1
 	p.pesHeaderDataLength = src[8]
+	p.esLength = p.packetLength - 3 - uint16(p.pesHeaderDataLength)
+
+	if p.ptsDtsFlags == 0 {
+		//return -1, fmt.Errorf("the timestamp flags %d is incorrect", p.ptsDtsFlags)
+	}
 
 	offset := 9
-	if p.ptsDtsFlags&0x2 == 0x2 {
+	if p.ptsDtsFlags>>1 == 0x1 {
+		if length < offset+5 {
+			return 0, nil
+		}
 		p.pts = int64(src[offset]&0xE)<<29 | (int64(src[offset+1]) << 22) | (int64(src[offset+2]&0xFE) << 14) | (int64(src[offset+3]) << 7) | int64(src[offset+4]>>1)
-		offset += 5
+		//offset += 5
 	}
 
 	if p.ptsDtsFlags&0x1 == 0x1 {
+		if length < offset+5 {
+			return 0, nil
+		}
+
 		p.dts = int64(src[offset]&0xE)<<29 | (int64(src[offset+1]) << 22) | (int64(src[offset+2]&0xFE) << 14) | (int64(src[offset+3]) << 7) | int64(src[offset+4]>>1)
-		offset += 5
+		//offset += 5
 	}
 
 	if p.escrFlag == 0x1 {
+		if length < offset+6 {
+			return 0, nil
+		}
+
 		p.escrBase = (uint64(src[offset]&0x38) << 27) | (uint64(src[offset]&0x3) << 28) | (uint64(src[offset+1]) << 20) | (uint64(src[offset+2]&0xF8) << 12) | (uint64(src[offset+2]&0x3) << 13) | (uint64(src[offset+3]) << 5) | (uint64(src[offset+4] >> 3))
 		p.escrExtension = uint16(src[offset+4]&0x3<<6) | uint16(src[offset+5]>>1)
-		offset += 6
+		//offset += 6
 	}
 
 	if p.esRateFlag == 0x1 {
+		if length < offset+3 {
+			return 0, nil
+		}
+
 		p.esRate = (uint32(src[offset]&0x7F) << 15) | (uint32(src[offset+1]) << 7) | uint32(src[offset+2]>>1)
-		offset += 3
+		//offset += 3
 	}
 
-	return offset
+	return offset + int(p.pesHeaderDataLength), nil
 }

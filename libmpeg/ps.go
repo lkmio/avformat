@@ -1,6 +1,7 @@
 package libmpeg
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"github.com/yangjiechina/avformat/libbufio"
@@ -27,11 +28,15 @@ const (
 	StreamTypePrivateSection = 0x05
 	StreamTypePrivateData    = 0x06
 	StreamTypeAudioAAC       = 0x0F
+	StreamTypeAudioMpeg4AAC  = 0x11
 	StreamTypeVideoMpeg4     = 0x10
 	StreamTypeVideoH264      = 0x1B
 	StreamTypeVideoHEVC      = 0x24
 	StreamTypeVideoCAVS      = 0x42
 	StreamTypeAudioAC3       = 0x81
+
+	StreamTypeAudioG711A = 0x90
+	StreamTypeAudioG711U = 0x91
 )
 
 var (
@@ -85,7 +90,7 @@ type PacketHeader struct {
 }
 
 func (h *PacketHeader) ToBytes(dst []byte) int {
-	libbufio.WriteDWORD(dst, PacketStartCode)
+	binary.BigEndian.PutUint32(dst, PacketStartCode)
 	//2bits 01
 	dst[4] = 0x40
 	//3bits [32..30]
@@ -136,7 +141,7 @@ func (h *PacketHeader) ToBytes(dst []byte) int {
 func readPackHeader(header *PacketHeader, src []byte) int {
 	length := len(src)
 	if length < 14 {
-		return 0
+		return -1
 	}
 	header.mpeg2 = src[4]&0xC0 == 0
 	//mpeg1 版本占用4bits 没有clockExtension reserved stuffingLength
@@ -151,7 +156,7 @@ func readPackHeader(header *PacketHeader, src []byte) int {
 
 	l := 14 + int(src[13]&0x7)
 	if l > length {
-		return 0
+		return -1
 	}
 
 	header.stuffing = src[14:l]
@@ -195,6 +200,7 @@ func (h *streamHeader) ToBytes(data []byte) {
 	data[2] = byte(h.bufferSizeBound & 0xFF)
 }
 
+// SystemHeader 系统头标记流的stream id: 00 00 00 `E0`, 00 00 00 `C0`
 type SystemHeader struct {
 	//6 bytes
 	rateBound                 uint32 //22
@@ -225,12 +231,12 @@ func (h *SystemHeader) findStream(id byte) (streamHeader, bool) {
 func readSystemHeader(header *SystemHeader, src []byte) int {
 	length := len(src)
 	if length < 6 {
-		return 0
+		return -1
 	}
 
 	totalLength := 6 + (int(src[4])<<8 | int(src[5]))
 	if totalLength > length {
-		return 0
+		return -1
 	}
 
 	header.rateBound = uint32(src[6]) & 0x7E << 15
@@ -247,7 +253,7 @@ func readSystemHeader(header *SystemHeader, src []byte) int {
 	header.packetRateRestrictionFlag = src[11] >> 7
 
 	offset := 12
-	for ; offset <= totalLength && (src[offset]&0x80) == 0x80 && (totalLength-offset)%3 == 0; offset += 3 {
+	for ; offset < totalLength && (src[offset]&0x80) == 0x80 && (totalLength-offset)%3 == 0; offset += 3 {
 		if _, ok := header.findStream(src[offset]); ok {
 			continue
 		}
@@ -264,7 +270,7 @@ func readSystemHeader(header *SystemHeader, src []byte) int {
 }
 
 func (h *SystemHeader) ToBytes(dst []byte) int {
-	libbufio.WriteDWORD(dst, SystemHeaderStartCode)
+	binary.BigEndian.PutUint32(dst, SystemHeaderStartCode)
 	dst[6] = 0x80
 	dst[6] = dst[6] | byte(h.rateBound>>15)
 	dst[7] = byte(h.rateBound >> 7)
@@ -289,7 +295,7 @@ func (h *SystemHeader) ToBytes(dst []byte) int {
 		offset += (i + 1) * 3
 	}
 
-	libbufio.WriteWORD(dst[4:], uint16(offset-6))
+	binary.BigEndian.PutUint16(dst[4:], uint16(offset-6))
 	return offset
 }
 
@@ -336,6 +342,7 @@ func (e ElementaryStream) ToString() string {
 	}
 }
 
+// ProgramStreamMap 映射头标记流的编码器信息
 type ProgramStreamMap struct {
 	streamId             byte
 	currentNextIndicator byte //1 bit
@@ -379,11 +386,11 @@ func (h *ProgramStreamMap) ToString() string {
 func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	length := len(src)
 	if length < 16 {
-		return 0, nil
+		return -1, nil
 	}
 	totalLength := 6 + int(libbufio.BytesToUInt16(src[4], src[5]))
 	if totalLength > length {
-		return 0, nil
+		return -1, nil
 	}
 
 	header.streamId = src[3]
@@ -395,7 +402,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	if infoLength > 0 {
 		// +2 reserved elementary_stream_map_length
 		if 10+2+infoLength > totalLength-4 {
-			return 0, fmt.Errorf("bad bytes:%s", hex.EncodeToString(src))
+			return -1, fmt.Errorf("invalid data:%s", hex.EncodeToString(src))
 		}
 
 		offset += infoLength
@@ -405,7 +412,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	elementaryLength := int(libbufio.BytesToUInt16(src[offset], src[offset+1]))
 	offset += 2
 	if offset+elementaryLength > totalLength-4 {
-		return 0, fmt.Errorf("bad bytes:%s", hex.EncodeToString(src))
+		return -1, fmt.Errorf("invalid data:%s", hex.EncodeToString(src))
 	}
 
 	for i := offset; i < offset+elementaryLength; i += 4 {
@@ -419,7 +426,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 			if eInfoLength > 0 {
 				//if i+4+eInfoLength > offset+elementaryLength {
 				if i+4+eInfoLength > totalLength-4 {
-					return 0, fmt.Errorf("bad bytes:%s", hex.EncodeToString(src))
+					return 0, fmt.Errorf("invalid data:%s", hex.EncodeToString(src))
 				}
 				element.info = src[i+4 : i+4+eInfoLength]
 			}
@@ -436,7 +443,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 }
 
 func (h *ProgramStreamMap) ToBytes(dst []byte) int {
-	libbufio.WriteDWORD(dst, PSMStartCode)
+	binary.BigEndian.PutUint32(dst, PSMStartCode)
 	//current_next_indicator
 	dst[6] = 0x80
 	//reserved
@@ -452,10 +459,10 @@ func (h *ProgramStreamMap) ToBytes(dst []byte) int {
 	if h.info != nil {
 		length := len(h.info)
 		copy(dst[offset:], h.info)
-		libbufio.WriteWORD(dst[8:], uint16(length))
+		binary.BigEndian.PutUint16(dst[8:], uint16(length))
 		offset += length
 	} else {
-		libbufio.WriteWORD(dst[8:], 0)
+		binary.BigEndian.PutUint16(dst[8:], 0)
 	}
 	//elementary length
 	offset += 2
@@ -468,21 +475,21 @@ func (h *ProgramStreamMap) ToBytes(dst []byte) int {
 		if elementaryStream.info != nil {
 			length := len(elementaryStream.info)
 			copy(dst[offset:], elementaryStream.info)
-			libbufio.WriteWORD(dst[offset-2:], uint16(length))
+			binary.BigEndian.PutUint16(dst[offset-2:], uint16(length))
 			offset += length
 		} else {
-			libbufio.WriteWORD(dst[offset-2:], 0)
+			binary.BigEndian.PutUint16(dst[offset-2:], 0)
 		}
 	}
 
 	elementaryLength := offset - temp
-	libbufio.WriteWORD(dst[temp-2:], uint16(elementaryLength))
+	binary.BigEndian.PutUint16(dst[temp-2:], uint16(elementaryLength))
 
 	crc32 := utils.CalculateCrcMpeg2(dst[:offset])
-	libbufio.WriteDWORD(dst[offset:], crc32)
+	binary.BigEndian.PutUint32(dst[offset:], crc32)
 
 	offset += 4
-	libbufio.WriteWORD(dst[4:], uint16(offset-6))
+	binary.BigEndian.PutUint16(dst[4:], uint16(offset-6))
 
 	return offset
 }

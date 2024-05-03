@@ -1,8 +1,10 @@
 package transport
 
 import (
+	"fmt"
 	"net"
 	"testing"
+	"time"
 )
 
 type TCPClientHandler struct {
@@ -23,6 +25,21 @@ func (T *TCPClientHandler) OnDisConnected(conn net.Conn, err error) {
 }
 
 func TestTCPClient(t *testing.T) {
+	d := net.Dialer{
+		LocalAddr: &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 9000}, // 尝试绑定到本地的8888端口
+		Timeout:   5 * time.Second,
+	}
+
+	//net.DialTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8888}, &net.TCPAddr{IP: net.ParseIP("192.168.31.112"), Port: 40000})
+	conn, err := d.Dial("tcp", "192.168.31.112:40000")
+	if err != nil {
+		fmt.Println("Failed to connect:", err)
+		return
+	}
+	defer conn.Close()
+
+	select {}
+
 	var clients []*TCPClient
 	handler := &TCPClientHandler{}
 	for i := 0; i < 100; i++ {

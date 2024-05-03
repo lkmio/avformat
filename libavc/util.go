@@ -2,6 +2,7 @@ package libavc
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/yangjiechina/avformat/libbufio"
 )
 
@@ -36,6 +37,18 @@ func FindStartCode(p []byte) int {
 	} else {
 		return -1
 	}
+}
+
+// FindStartCodeWithReader 返回start code值
+func FindStartCodeWithReader(reader libbufio.BytesReader) int {
+	data := reader.Data()
+	index := FindStartCode(data)
+	if index < 0 {
+		return -1
+	}
+
+	_ = reader.Seek(index + 1)
+	return int(data[index])
 }
 
 // FindStartCode2 返回的是start code的起始位置
@@ -254,21 +267,27 @@ func AnnexB2AVCC(dst []byte, annexB []byte) int {
 		for nalStart < length && annexB[nalStart] == 0 {
 			nalStart++
 		}
+
 		if nalStart == length {
 			return size
 		}
 
 		nalEnd := FindStartCode(annexB[nalStart:])
 		if nalEnd < 0 {
-			return size
+			nalEnd = len(annexB[nalStart:])
 		}
 
-		nalSize := nalEnd - nalStart
+		nalSize := nalEnd - 4
+		if nalSize < 0 || annexB[nalStart:][nalSize] != 0x0 {
+			nalSize++
+		}
+
 		binary.BigEndian.PutUint32(dst[size:], uint32(nalSize))
 		size += 4
-		copy(dst[size:], annexB[nalStart:nalEnd])
+
+		copy(dst[size:], annexB[nalStart:nalStart+nalSize])
 		size += nalSize
-		nalStart = nalEnd
+		nalStart += nalEnd
 	}
 }
 
@@ -339,10 +358,11 @@ func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
 
 func SplitNalU(data []byte, cb func(nalu []byte)) {
 	var offset int
+	//+3查找第二个nalu
 	for n := FindStartCode2(data[offset+3:]); n > -1; n = FindStartCode2(data[offset+3:]) {
 		n += 3
-		cb(data[offset:n])
-		offset = n
+		cb(data[offset : offset+n])
+		offset += n
 	}
 
 	cb(data[offset:])
@@ -357,6 +377,30 @@ func RemoveStartCode(data []byte) []byte {
 
 	//utils.Assert(data[2] == 0x0 && data[3] == 0x1)
 	return data[4:]
+}
+
+// ParseExtraDataFromKeyNALU 从关键帧中解析出sps/pss
+func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, error) {
+	var sps []byte
+	var pps []byte
+
+	SplitNalU(data, func(nalu []byte) {
+		noStartCodeNALU := RemoveStartCode(nalu)
+		header := noStartCodeNALU[0] & 0x1F
+
+		if byte(H264NalSPS) == header {
+			sps = make([]byte, len(noStartCodeNALU))
+			copy(sps, noStartCodeNALU)
+		} else if byte(H264NalPPS) == header {
+			pps = make([]byte, len(noStartCodeNALU))
+			copy(pps, noStartCodeNALU)
+		}
+	})
+
+	if sps == nil || pps == nil {
+		return nil, nil, fmt.Errorf("not find extra data for H264")
+	}
+	return sps, pps, nil
 }
 
 /*aligned(8) class AVCDecoderConfigurationRecord {

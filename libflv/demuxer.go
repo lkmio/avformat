@@ -266,6 +266,12 @@ func (d *deMuxer) Input(data []byte) (int, error) {
 
 // InputVideo 输入不带tag的视频帧
 func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
+	if d.audioIndex == -1 {
+		d.videoIndex = 0
+	} else {
+		d.videoIndex = 1
+	}
+
 	n, sequenceHeader, key, codecId, ct, err := ParseVideoData(data)
 	if err != nil {
 		return err
@@ -279,15 +285,10 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 		}
 
 		var stream utils.AVStream
-		if d.audioIndex == -1 {
-			d.videoIndex = 0
-		} else {
-			d.videoIndex = 1
-		}
-
 		var config utils.CodecData
 		extraData := make([]byte, len(data[n:]))
 		copy(extraData, data[n:])
+
 		if utils.AVCodecIdH264 == codecId {
 			self, err := utils.ParseAVCDecoderConfigurationRecord(extraData)
 			if err != nil {
@@ -304,7 +305,7 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			config = self
 		}
 
-		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, extraData, utils.ExtraTypeM4VC, config)
+		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, extraData, config)
 		d.videoStream = stream
 
 		d.Handler.OnDeMuxStream(d.videoStream)
@@ -312,7 +313,7 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			d.Handler.OnDeMuxStreamDone()
 		}
 	} else {
-		if d.videoIndex == -1 {
+		if d.videoStream == nil {
 			return fmt.Errorf("missing video sequence header")
 		}
 
@@ -334,6 +335,12 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 }
 
 func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
+	if d.videoIndex == -1 {
+		d.audioIndex = 0
+	} else {
+		d.audioIndex = 1
+	}
+
 	n, sequenceHeader, codecId, err := ParseAudioData(data)
 	if err != nil {
 		return err
@@ -344,20 +351,14 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 			return nil
 		}
 
-		if d.videoIndex == -1 {
-			d.audioIndex = 0
-		} else {
-			d.audioIndex = 1
-		}
-
 		var audioStream utils.AVStream
 		if utils.AVCodecIdAAC == codecId && sequenceHeader {
 			extraData := make([]byte, len(data[n:]))
 			copy(extraData, data[n:])
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, extraData, utils.ExtraTypeNONE, nil)
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, extraData, nil)
 			n = len(data)
 		} else {
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, utils.ExtraTypeNONE, nil)
+			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, nil)
 		}
 
 		d.audioStream = audioStream
@@ -371,7 +372,7 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 		}
 	}
 
-	if d.audioIndex == -1 {
+	if d.audioStream == nil {
 		return fmt.Errorf("missing audio sequence header")
 	}
 

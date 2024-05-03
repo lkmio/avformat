@@ -10,7 +10,8 @@ import (
 
 type UDPTransport struct {
 	transportImpl
-	udp []net.PacketConn
+	udp             []net.PacketConn
+	concurrentCount int
 }
 
 func reusePortControl(network, address string, c syscall.RawConn) error {
@@ -21,16 +22,22 @@ func reusePortControl(network, address string, c syscall.RawConn) error {
 	})
 }
 
-func (u *UDPTransport) Bind(addr net.Addr) error {
-	utils.Assert(u.handler != nil)
-
+func NewUDPServer(addr net.Addr, handler Handler) (*UDPTransport, error) {
 	count := runtime.NumCPU()
 	if runtime.GOOS == "darwin" {
 		count = 1
 	}
 
+	transport := &UDPTransport{concurrentCount: count}
+	transport.SetHandler(handler)
+	return transport, transport.Bind(addr)
+}
+
+func (u *UDPTransport) Bind(addr net.Addr) error {
+	utils.Assert(u.handler != nil)
+
 	u.ctx, u.cancel = context.WithCancel(context.Background())
-	for i := 0; i < count; i++ {
+	for i := 0; i < u.concurrentCount; i++ {
 		lc := net.ListenConfig{
 			Control: reusePortControl,
 		}
@@ -44,6 +51,10 @@ func (u *UDPTransport) Bind(addr net.Addr) error {
 	}
 
 	return nil
+}
+
+func (u *UDPTransport) Send(data []byte, addr net.Addr) (int, error) {
+	return u.udp[0].WriteTo(data, addr)
 }
 
 func recv2(ctx context.Context, conn net.PacketConn, handler Handler) {

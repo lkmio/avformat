@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/yangjiechina/avformat/libflv"
-	"github.com/yangjiechina/avformat/stream"
 	"github.com/yangjiechina/avformat/utils"
 )
 
@@ -41,9 +40,13 @@ type OnEventHandler interface {
 }
 
 type OnPublishHandler interface {
-	OnVideo(data []byte, ts uint32)
+	// OnPartPacket 部分音视频包回调
+	OnPartPacket(index int, mediaType utils.AVMediaType, data []byte, first bool)
 
-	OnAudio(data []byte, ts uint32)
+	// OnVideo 完整音视频帧回调
+	OnVideo(index int, data []byte, ts uint32)
+
+	OnAudio(index int, data []byte, ts uint32)
 }
 
 type Stack struct {
@@ -62,19 +65,35 @@ type Stack struct {
 	publisherHandler OnPublishHandler
 
 	metaData map[string]interface{}
+
+	audioStreamIndex int
+	videoStreamIndex int
 }
 
 func NewStack(handler OnEventHandler) *Stack {
 	utils.Assert(handler != nil)
-	return &Stack{parser: NewParser(DefaultChunkSize), handler: handler}
+	return &Stack{parser: NewParser(DefaultChunkSize), handler: handler,
+		audioStreamIndex: -1,
+		videoStreamIndex: -1}
 }
 
 func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
-	s.publisherHandler = handler
-}
+	s.parser.partPacketCB = func(data []byte) {
+		if ChunkStreamIdAudio == s.parser.chunk.csid {
+			if s.audioStreamIndex == -1 {
+				s.audioStreamIndex = libbufio.MaxInt(s.videoStreamIndex, -1) + 1
+			}
 
-func (s *Stack) SetOnTransDeMuxerHandler(handler stream.OnTransDeMuxerHandler) {
-	s.parser.handler = handler
+			s.publisherHandler.OnPartPacket(s.audioStreamIndex, utils.AVMediaTypeAudio, data, s.parser.chunk.size == len(data))
+		} else {
+			if s.videoStreamIndex == -1 {
+				s.videoStreamIndex = libbufio.MaxInt(s.audioStreamIndex, -1) + 1
+			}
+
+			s.publisherHandler.OnPartPacket(s.videoStreamIndex, utils.AVMediaTypeVideo, data, s.parser.chunk.size == len(data))
+		}
+	}
+	s.publisherHandler = handler
 }
 
 func (s *Stack) DoHandshake(conn net.Conn, data []byte) (int, error) {
@@ -222,18 +241,18 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 		//p.sendWindowAcknowledgementSize()
 		break
 	case MessageTypeIDAudio:
-		if s.parser.handler == nil {
-			s.publisherHandler.OnAudio(chunk.data[:chunk.Length], chunk.Timestamp)
+		if s.publisherHandler == nil {
+			s.publisherHandler.OnAudio(s.audioStreamIndex, chunk.data[:chunk.Length], chunk.Timestamp)
 		} else {
-			s.publisherHandler.OnAudio(nil, chunk.Timestamp)
+			s.publisherHandler.OnAudio(s.audioStreamIndex, nil, chunk.Timestamp)
 		}
 
 		break
 	case MessageTypeIDVideo:
-		if s.parser.handler == nil {
-			s.publisherHandler.OnVideo(chunk.data[:chunk.Length], chunk.Timestamp)
+		if s.publisherHandler == nil {
+			s.publisherHandler.OnVideo(s.videoStreamIndex, chunk.data[:chunk.Length], chunk.Timestamp)
 		} else {
-			s.publisherHandler.OnVideo(nil, chunk.Timestamp)
+			s.publisherHandler.OnVideo(s.videoStreamIndex, nil, chunk.Timestamp)
 		}
 
 		break

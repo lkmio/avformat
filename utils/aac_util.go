@@ -1,6 +1,10 @@
 package utils
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+	"github.com/yangjiechina/avformat/libbufio"
+)
 
 type AudioObjectType int
 
@@ -105,6 +109,71 @@ type MPEG4AudioConfig struct {
 	frameLengthShort int
 }
 
+type ADtsHeader uint64
+
+func (a ADtsHeader) SyncWord() int {
+	return int(a) >> 44 & 0xFFF
+}
+
+// ID 0-mpeg4/1-mpeg2
+func (a ADtsHeader) ID() int {
+	return int(a) >> 43 & 0x1
+}
+
+func (a ADtsHeader) Layer() int {
+	return int(a) >> 41 & 0x3
+}
+
+// ProtectionAbsent 1-header length=7/0-header length=9(多2个字节crc校验码)
+func (a ADtsHeader) ProtectionAbsent() int {
+	return int(a) >> 40 & 0x1
+}
+
+// Profile Aot减1
+func (a ADtsHeader) Profile() int {
+	return int(a) >> 38 & 0x3
+}
+
+func (a ADtsHeader) Frequency() int {
+	return int(a) >> 34 & 0xF
+}
+
+func (a ADtsHeader) PrivateBit() int {
+	return int(a) >> 33 & 0x1
+}
+
+func (a ADtsHeader) Channel() int {
+	return int(a) >> 30 & 0x7
+}
+
+func (a ADtsHeader) Original() int {
+	return int(a) >> 29 & 0x1
+}
+
+func (a ADtsHeader) Home() int {
+	return int(a) >> 28 & 0x1
+}
+
+func (a ADtsHeader) CopyrightBit() int {
+	return int(a) >> 27 & 0x1
+}
+
+func (a ADtsHeader) CopyrightStart() int {
+	return int(a) >> 26 & 0x1
+}
+
+func (a ADtsHeader) FrameLength() int {
+	return int(a) >> 13 & 0x1FFF
+}
+
+func (a ADtsHeader) Fullness() int {
+	return int(a) >> 2 & 0x7FF
+}
+
+func (a ADtsHeader) Blocks() int {
+	return int(a) & 0x3
+}
+
 func GetSampleRate(index int) (int, bool) {
 	i, ok := audioSamplingRates[index]
 	return i, ok
@@ -144,6 +213,34 @@ func SetADtsHeader(header []byte, mpegId, aot, index, channelConfig, size int) {
 	//adts_buffer_fullness 0x7FF 11bits
 	header[5] = header[5] | 0x1F
 	header[6] = 0xFC // the last 2 bytes of byte belong to number_of_raw_data_blocks_in_frame
+}
+
+func ReadADtsFixedHeader(data []byte) (ADtsHeader, error) {
+	if 0xFFF != binary.BigEndian.Uint16(data)>>4 {
+		return 0, fmt.Errorf("not find syncword")
+	}
+
+	var header uint64
+	header = uint64(libbufio.BytesToUInt24(data)) << 32
+	header |= uint64(binary.BigEndian.Uint32(data[3:]))
+
+	if ADtsHeader(header).ProtectionAbsent() == 0 {
+	}
+
+	return ADtsHeader(header), nil
+}
+
+func ADtsHeader2MpegAudioConfigData(header ADtsHeader) ([]byte, error) {
+	bytes := make([]byte, 2)
+	profile := header.Profile()
+	bytes[0] = (uint8(profile) + 1) & 0x1F << 3
+	frequency := header.Frequency()
+
+	bytes[0] |= uint8(frequency) >> 1 & 0x7
+	bytes[1] = uint8(frequency) & 0x1 << 7
+	bytes[1] |= uint8(header.Channel()) & 0xF << 3
+
+	return bytes, nil
 }
 
 func ParseMpeg4AudioConfig(data []byte) (*MPEG4AudioConfig, error) {

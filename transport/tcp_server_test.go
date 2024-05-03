@@ -26,11 +26,12 @@ func TestTCPServer(t *testing.T) {
 	server := TCPServer{}
 	handler := &TCPServerHandler{}
 	server.SetHandler(handler)
-	addr := "0.0.0.0:8000"
+	addr, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:8000")
+
 	if err := server.Bind(addr); err != nil {
 		panic(err)
 	}
 
-	println("成功监听:" + addr)
+	println("成功监听:" + addr.String())
 	select {}
 }
