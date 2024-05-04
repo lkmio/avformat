@@ -755,7 +755,7 @@ func (self AVCDecoderConfRecord) ToMP4VC() []byte {
 
 		for i, pps := range self.PPS {
 			m4vc[offset] = byte(i + 1)
-
+			offset++
 			binary.BigEndian.PutUint16(m4vc[offset:], uint16(len(pps)))
 			offset += 2
 			copy(m4vc[offset:], pps)
