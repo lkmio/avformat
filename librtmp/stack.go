@@ -84,13 +84,13 @@ func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
 				s.audioStreamIndex = libbufio.MaxInt(s.videoStreamIndex, -1) + 1
 			}
 
-			s.publisherHandler.OnPartPacket(s.audioStreamIndex, utils.AVMediaTypeAudio, data, s.parser.chunk.size == len(data))
+			s.publisherHandler.OnPartPacket(s.audioStreamIndex, utils.AVMediaTypeAudio, data, s.parser.chunk.size == 0)
 		} else {
 			if s.videoStreamIndex == -1 {
 				s.videoStreamIndex = libbufio.MaxInt(s.audioStreamIndex, -1) + 1
 			}
 
-			s.publisherHandler.OnPartPacket(s.videoStreamIndex, utils.AVMediaTypeVideo, data, s.parser.chunk.size == len(data))
+			s.publisherHandler.OnPartPacket(s.videoStreamIndex, utils.AVMediaTypeVideo, data, s.parser.chunk.size == 0)
 		}
 	}
 	s.publisherHandler = handler

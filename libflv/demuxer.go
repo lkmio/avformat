@@ -266,10 +266,8 @@ func (d *deMuxer) Input(data []byte) (int, error) {
 
 // InputVideo 输入不带tag的视频帧
 func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
-	if d.audioIndex == -1 {
-		d.videoIndex = 0
-	} else {
-		d.videoIndex = 1
+	if d.videoIndex == -1 {
+		d.videoIndex = d.audioIndex + 1
 	}
 
 	n, sequenceHeader, key, codecId, ct, err := ParseVideoData(data)
@@ -335,10 +333,8 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 }
 
 func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
-	if d.videoIndex == -1 {
-		d.audioIndex = 0
-	} else {
-		d.audioIndex = 1
+	if d.audioIndex == -1 {
+		d.audioIndex = d.videoIndex + 1
 	}
 
 	n, sequenceHeader, codecId, err := ParseAudioData(data)
