@@ -146,7 +146,7 @@ func (s *Stack) Input(conn net.Conn, data []byte) error {
 	if s.handshakeBufferSize > 0 {
 		min := libbufio.MinInt(len(data), MaxHandshakeBufferSize-s.handshakeBufferSize)
 		copy(s.handshakeBuffer[s.handshakeBufferSize:], data[:min])
-		tmp = s.handshakeBuffer
+		tmp = s.handshakeBuffer[:s.handshakeBufferSize+min]
 		s.handshakeBufferSize = 0
 	}
 
