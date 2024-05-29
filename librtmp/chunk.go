@@ -257,7 +257,7 @@ func (h *Chunk) Reset() {
 	//c.csid = 0
 	h.Timestamp = 0
 	//c.Length	 = 0
-	h.tid = 0
+	//h.tid = 0
 	h.sid = 0
 	h.size = 0
 }
