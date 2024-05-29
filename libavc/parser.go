@@ -789,6 +789,7 @@ func (self AVCDecoderConfRecord) ToAnnexB() []byte {
 
 		for _, pps := range self.PPS {
 			binary.BigEndian.PutUint32(annexBData[offset:], 0x1)
+			offset += 4
 			copy(annexBData[offset:], pps)
 			offset += len(pps)
 		}
