@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
-	"math"
 )
 
 /**
@@ -148,7 +147,9 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 
 		//首包加入pcr和aud
 		if remain == pesLen {
-			pktSize -= track.tsHeader.writePCR(bytes[4:], pts*300)
+			if utils.AVMediaTypeVideo == track.mediaType {
+				pktSize -= track.tsHeader.writePCR(bytes[4:], pts*300)
+			}
 			track.tsHeader.payloadUnitStartIndicator = 1
 		} else {
 			track.tsHeader.payloadUnitStartIndicator = 0
@@ -157,13 +158,7 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 		//不足一个包, 填充满188个字节
 		fillCount := pktSize - remain
 		if fillCount > 0 {
-			fillCount -= 2
-			pktSize -= track.tsHeader.fill(bytes[TsPacketSize-pktSize:], int(math.Abs(float64(fillCount))), remain != pesLen)
-
-			//填充的数量 必须要大于自适应字段的最低长度, 否则不够写. 只能少些点pes数据
-			if fillCount < 0 {
-				pktSize += fillCount
-			}
+			pktSize -= track.tsHeader.fill(bytes[TsPacketSize-pktSize:], fillCount)
 		}
 
 		//拷贝pes头

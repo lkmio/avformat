@@ -2,6 +2,7 @@ package libmpeg
 
 import (
 	"encoding/binary"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"math"
 )
@@ -49,6 +50,28 @@ type TSHeader struct {
 	transportScramblingControl byte //2bits 加密使用
 	adaptationFieldControl     byte //2bits 10-全是自适应字段数据 11-自适应字段后跟随负载数据 01-全是负载数据
 	continuityCounter          byte //4bits
+	adaptationField            AdaptationField
+}
+
+type AdaptationField struct {
+	length byte
+
+	//discontinuity_indicator 1 bslbf
+	//random_access_indicator 1 bslbf
+	//elementary_stream_priority_indicator 1 bslbf
+	//PCR_flag 1 bslbf
+	//OPCR_flag 1 bslbf
+	//splicing_point_flag 1 bslbf
+	//transport_private_data_flag 1 bslbf
+	//adaptation_field_extension_flag 1 bslbf
+	tag             byte
+	pcr             int64
+	opcr            int64
+	spliceCountdown byte
+	privateData     []byte
+	stuffingCount   int
+
+	//adaptation_field_extension_length
 }
 
 func NewTSHeader(pid int, start, counter byte) TSHeader {
@@ -61,6 +84,7 @@ func NewTSHeader(pid int, start, counter byte) TSHeader {
 		transportScramblingControl: 0,
 		adaptationFieldControl:     0x01,
 		continuityCounter:          counter,
+		adaptationField:            AdaptationField{length: 0xFF},
 	}
 }
 
@@ -71,8 +95,15 @@ func (h *TSHeader) toBytes(dst []byte) {
 	dst[2] = byte(h.pid)
 	dst[3] = (h.transportScramblingControl & 0x3 << 6) | (h.adaptationFieldControl & 0x3 << 4) | (h.continuityCounter & 0xF)
 
+	if h.adaptationFieldControl == 0x3 && h.adaptationField.length > 0 {
+		dst[4] = h.adaptationField.length
+		dst[5] = h.adaptationField.tag
+	}
+
 	//重置为没有自适应数据
 	h.adaptationFieldControl = 0x1
+	h.adaptationField.length = 0
+	h.adaptationField.tag = 0
 }
 
 func (h *TSHeader) increaseCounter() {
@@ -81,19 +112,28 @@ func (h *TSHeader) increaseCounter() {
 
 func (h *TSHeader) writePCR(data []byte, pcr int64) int {
 	h.adaptationFieldControl = 0x3
-
-	n := writeAdaptationField(data[1:], pcr)
-	data[0] = byte(n)
+	n := h.writeAdaptationField(data[1:], pcr)
+	h.adaptationField.length = byte(n)
+	//预留adaptation_field_length字段
 	return 1 + n
 }
 
 // PES数据不足以填满整个TS包时，填充FF
-func (h *TSHeader) fill(data []byte, count int, adaptation bool) int {
+func (h *TSHeader) fill(data []byte, count int) int {
 	h.adaptationFieldControl = 0x3
-	data[0] = byte(1 + count)
-	data[1] = 0x0
-	copy(data[2:], stuffing[:count])
-	return 2 + count
+
+	//如果还没有写过自适应字段
+	//预留2字节
+	var n int
+	if h.adaptationField.length < 1 {
+		count = libbufio.MaxInt(count-2, 0)
+		n = 2
+		h.adaptationField.length++
+	}
+
+	copy(data[n:], stuffing[:count])
+	h.adaptationField.length += byte(count)
+	return n + count
 }
 
 func readTSHeader(data []byte) (TSHeader, int) {
@@ -360,37 +400,21 @@ func writePMT(data []byte, counter byte, programNumber_, pcrPid_ int, streamType
 }
 
 // section 2.4.3.4
-func writeAdaptationField(data []byte, pcr int64) int {
+func (h *TSHeader) writeAdaptationField(data []byte, pcr int64) int {
 	var n int
 
-	var discontinuityIndicator byte
-	var randomAccessIndicator byte
-	var elementaryStreamPriorityIndicator byte
-	var PCRFlag byte
-	var OPCRFlag byte
-	var splicingPointFlag byte
-	var transportPrivateDataFlag byte
-	var adaptationFieldExtensionFlag byte
+	h.adaptationField.tag = 0x1 << 4
 
 	//var pcr int64
 	var opcr int64
 	var spliceCountdown byte
 	var privateData []byte
 
-	discontinuityIndicator = 0
-	//当前和后续TS包PID可能相同
-	randomAccessIndicator = 1
-	elementaryStreamPriorityIndicator = 0
-	PCRFlag = 1
-	OPCRFlag = 0
-	splicingPointFlag = 0
-	transportPrivateDataFlag = 0
-	adaptationFieldExtensionFlag = 0
-	data[n] = (discontinuityIndicator & 0x1 << 7) | (randomAccessIndicator & 0x1 << 6) | (elementaryStreamPriorityIndicator & 0x1 << 5) | (PCRFlag & 0x1 << 4) | (OPCRFlag & 0x1 << 3) | (splicingPointFlag & 0x1 << 2) | (transportPrivateDataFlag & 0x1 << 1) | (adaptationFieldExtensionFlag & 0x1)
+	data[n] = h.adaptationField.tag
 	n++
 	//MPEG-2标准中, 时钟频率为27MHZ
 	//PES中的DTS和PTS 90KHZ
-	if PCRFlag&0x1 == 1 {
+	if h.adaptationField.tag>>4&0x1 == 1 {
 		//不能超过42位
 		utils.Assert(pcr <= 0x3FFFFFFFFF)
 		//PCR(i)=PCR base(i)x300+ PCR ext(i)
@@ -413,7 +437,7 @@ func writeAdaptationField(data []byte, pcr int64) int {
 		n++
 	}
 
-	if OPCRFlag&0x1 == 1 {
+	if h.adaptationField.tag>>3&0x1 == 1 {
 		pcrBase := opcr / 300 % int64(math.Pow(2, 33))
 		pcrExtension := opcr % 300
 
@@ -431,12 +455,12 @@ func writeAdaptationField(data []byte, pcr int64) int {
 		n++
 	}
 
-	if splicingPointFlag&0x1 == 1 {
+	if h.adaptationField.tag>>2&0x1 == 1 {
 		data[n] = spliceCountdown
 		n++
 	}
 
-	if transportPrivateDataFlag&0x1 == 1 {
+	if h.adaptationField.tag>>1&0x1 == 1 {
 		utils.Assert(len(privateData) > 0)
 
 		data[n] = byte(len(privateData))
@@ -445,6 +469,8 @@ func writeAdaptationField(data []byte, pcr int64) int {
 		n += len(privateData)
 	}
 
+	//暂不实现扩展字段
+	utils.Assert(h.adaptationField.tag&0x1 == 0)
 	return n
 }
 
