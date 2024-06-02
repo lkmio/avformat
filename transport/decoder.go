@@ -6,6 +6,7 @@ import (
 	"github.com/yangjiechina/avformat/utils"
 )
 
+// FixedLengthFrameDecoder 固定长度解码器
 type FixedLengthFrameDecoder struct {
 	Data []byte
 	Size int //已经读取数据长度
@@ -43,6 +44,7 @@ func (d *FixedLengthFrameDecoder) Input(data []byte) error {
 	return nil
 }
 
+// LengthFieldFrameDecoder 帧长解码器
 type LengthFieldFrameDecoder struct {
 	Data  []byte
 	Size  int //已经读取数据长度
@@ -124,6 +126,88 @@ func (d *LengthFieldFrameDecoder) Input(data []byte) error {
 		d.cb(d.Data[:d.Size])
 		d.Size = 0
 		d.total = 0
+	}
+
+	return nil
+}
+
+// DelimiterFrameDecoder 分隔符解码器
+type DelimiterFrameDecoder struct {
+	delimiter       []byte //分隔符
+	delimiterLength int    //分隔符长度
+	foundCount      int    //已经匹配到的分割符数量
+
+	maxFrameLength int //最大帧长度
+
+	cb   func([]byte)
+	data []byte //解析缓存区
+	size int    //已缓存数据长度
+}
+
+// NewDelimiterFrameDecoder 创建分隔符解码器
+// @maxFrameLength 最大帧长, 如果在maxFrameLength范围内没解析完, 解析失败
+func NewDelimiterFrameDecoder(maxFrameLength int, delimiter []byte, cb func([]byte)) *DelimiterFrameDecoder {
+	utils.Assert(maxFrameLength > len(delimiter))
+	return &DelimiterFrameDecoder{
+		delimiter:       delimiter,
+		delimiterLength: len(delimiter),
+		maxFrameLength:  maxFrameLength,
+		cb:              cb,
+	}
+}
+
+func (d *DelimiterFrameDecoder) Input(data []byte) error {
+	var offset int
+	for i, v := range data {
+		if d.delimiter[d.foundCount] != v {
+			d.foundCount = 0
+			continue
+		}
+
+		d.foundCount++
+		if d.foundCount < d.delimiterLength {
+			continue
+		}
+
+		//回调数据
+		n := i + 1 - d.delimiterLength
+		if d.size > 0 {
+			//拷贝并回调
+			if n > 0 {
+				if d.maxFrameLength < d.size+n {
+					return fmt.Errorf("frame length exceeds %d", d.maxFrameLength)
+				}
+
+				copy(d.data[d.size:], data[offset:n])
+				d.size += n
+			} else {
+				//说明缓存包末尾包含分割符
+				d.size -= n
+			}
+
+			d.cb(d.data[:d.size])
+			d.size = 0
+		} else if n > 0 {
+			//回调当前包的数据
+			d.cb(data[offset:n])
+		}
+
+		offset = i + 1
+		d.foundCount = 0
+	}
+
+	//有未解析完的数据, 将剩余数据缓存起来
+	n := len(data) - offset
+	if n > 0 {
+		if d.maxFrameLength < d.size+n {
+			return fmt.Errorf("frame length exceeds %d", d.maxFrameLength)
+		}
+		if d.data == nil {
+			d.data = make([]byte, d.maxFrameLength)
+		}
+
+		copy(d.data[d.size:], data[offset:])
+		d.size += n
 	}
 
 	return nil
