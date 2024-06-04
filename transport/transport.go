@@ -26,15 +26,21 @@ type handlerImpl struct {
 }
 
 func (h *handlerImpl) OnConnected(conn net.Conn) {
-	h.onConnected(conn)
+	if h.onConnected != nil {
+		h.onConnected(conn)
+	}
 }
 
 func (h *handlerImpl) OnPacket(conn net.Conn, data []byte) {
-	h.onPacket(conn, data)
+	if h.onPacket != nil {
+		h.onPacket(conn, data)
+	}
 }
 
 func (h *handlerImpl) OnDisConnected(conn net.Conn, err error) {
-	h.onDisConnected(conn, err)
+	if h.onDisConnected != nil {
+		h.onDisConnected(conn, err)
+	}
 }
 
 type ITransport interface {

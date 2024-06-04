@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"net"
 	"runtime"
@@ -37,6 +38,7 @@ func (u *UDPTransport) Bind(addr net.Addr) error {
 	utils.Assert(u.handler != nil)
 
 	u.ctx, u.cancel = context.WithCancel(context.Background())
+	u.concurrentCount = libbufio.MaxInt(u.concurrentCount, 1)
 	for i := 0; i < u.concurrentCount; i++ {
 		lc := net.ListenConfig{
 			Control: reusePortControl,
