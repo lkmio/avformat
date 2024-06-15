@@ -11,6 +11,8 @@ type Conn struct {
 	//接收缓冲区
 	buffer []byte
 	Data   interface{}
+
+	closeCb func(conn net.Conn, err error)
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
@@ -22,6 +24,9 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 }
 
 func (c *Conn) Close() error {
+	if c.closeCb != nil {
+		c.closeCb(c, nil)
+	}
 	return c.conn.Close()
 }
 

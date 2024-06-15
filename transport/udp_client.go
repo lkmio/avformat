@@ -6,7 +6,7 @@ import (
 )
 
 type UDPClient struct {
-	transportImpl
+	transport
 	udp *net.UDPConn
 }
 
@@ -26,7 +26,7 @@ func (u *UDPClient) Connect(local, remote *net.UDPAddr) error {
 
 func (u *UDPClient) Recv() {
 	u.ctx, u.cancel = context.WithCancel(context.Background())
-	go recv2(u.ctx, u.udp, u.handler)
+	go recvUdp(u.ctx, u.udp, u.handler)
 }
 
 func (u *UDPClient) Write(data []byte) error {
@@ -40,6 +40,6 @@ func (u *UDPClient) WriteTo(data []byte, addr *net.UDPAddr) error {
 }
 
 func (u *UDPClient) Close() {
-	u.transportImpl.Close()
+	u.transport.Close()
 	u.udp.Close()
 }

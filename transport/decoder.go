@@ -46,86 +46,78 @@ func (d *FixedLengthFrameDecoder) Input(data []byte) error {
 
 // LengthFieldFrameDecoder 帧长解码器
 type LengthFieldFrameDecoder struct {
-	Data  []byte
-	Size  int //已经读取数据长度
-	total int //总长度
-	cap   int
+	data []byte //本次输入的数据长度小于帧长时, 作为缓存区
+	size int    //缓存区大小
 
 	cb func([]byte)
 
-	fieldLength int //几个字节描述数据包长
+	maxFrameLength   int //最大帧长
+	frameLength      int //当前帧长
+	fieldLength      int //几个字节描述数据帧长
+	fieldLengthCount int //已经读取到几个字节帧长
 }
 
-func NewLengthFieldFrameDecoder(frameLength, fieldLength int, cb func([]byte)) *LengthFieldFrameDecoder {
-	utils.Assert(frameLength > 0)
+// NewLengthFieldFrameDecoder 创建帧长解码器
+// @maxFrameLength 最大帧长, 如果在maxFrameLength范围内没解析完, 解析失败
+// @fieldLength 几个字节描述帧长
+func NewLengthFieldFrameDecoder(maxFrameLength, fieldLength int, cb func([]byte)) *LengthFieldFrameDecoder {
+	utils.Assert(maxFrameLength > 0)
 	utils.Assert(fieldLength > 0 && fieldLength < 5)
 
-	frameLength += fieldLength
+	return &LengthFieldFrameDecoder{maxFrameLength: maxFrameLength, cb: cb, fieldLength: fieldLength}
+}
 
-	return &LengthFieldFrameDecoder{Data: make([]byte, frameLength), Size: 0, cap: frameLength, cb: cb, fieldLength: fieldLength}
+func (d *LengthFieldFrameDecoder) callback(data []byte) {
+	d.callback(data)
+
+	//清空标记,重新读取
+	d.frameLength = 0
+	d.fieldLengthCount = 0
 }
 
 func (d *LengthFieldFrameDecoder) Input(data []byte) error {
-	i, length := 0, len(data)
+	var index int
+	length := len(data)
 
-	readLength := func() (int, error) {
-		//拷贝包长
-		if d.Size < d.fieldLength {
-			n := libbufio.MinInt(d.fieldLength-d.Size, length)
-			copy(d.Data[d.Size:], data[i:i+n])
-			i += n
-			d.Size += n
-
-			if d.Size < d.fieldLength {
-				return -1, nil
-			}
-
-			for i, v := range d.Data[:d.fieldLength] {
-				d.total |= int(v) << ((len(d.Data[:d.fieldLength]) - i - 1) * 8)
-			}
-
-			if d.total == 0 {
-				return -1, fmt.Errorf("the packet length cannot be 0")
-			}
-
-			d.total += d.fieldLength
-			return d.total, nil
+	for index < length {
+		//读取帧长度
+		for ; d.fieldLengthCount < d.fieldLength && index < length; index++ {
+			d.frameLength = d.frameLength<<8 | int(data[index])
+			d.fieldLengthCount++
 		}
 
-		return 0, nil
-	}
-
-	for length-i > 0 {
-		if d.Size < d.fieldLength {
-			i2, err := readLength()
-
-			if err != nil {
-				return err
-			}
-
-			if i2 < 0 {
-				return nil
-			}
-		}
-
-		remain := length - i
-		if remain < 1 {
+		//不够帧长
+		if d.fieldLengthCount < d.fieldLength {
 			return nil
 		}
 
-		need := d.total - d.Size
-		consume := libbufio.MinInt(remain, need)
-		copy(d.Data[d.Size:], data[i:i+consume])
-		i += consume
-		d.Size += consume
-
-		if remain < need {
-			return nil
+		if d.frameLength > d.maxFrameLength {
+			return fmt.Errorf("frame length exceeds %d", d.maxFrameLength)
 		}
 
-		d.cb(d.Data[:d.Size])
-		d.Size = 0
-		d.total = 0
+		n := length - index
+
+		//有缓存数据或者数据不够缓存起来
+		if d.size > 0 || n < d.frameLength {
+			if d.data == nil {
+				d.data = make([]byte, d.maxFrameLength)
+			}
+
+			consume := libbufio.MinInt(d.frameLength-d.size, n)
+			copy(d.data[d.size:], data[index:index+consume])
+			d.size += consume
+			index += consume
+		}
+
+		if d.size >= d.frameLength {
+			//回调缓存数据
+			d.callback(d.data[:d.frameLength])
+			d.size = 0
+		} else if n >= d.frameLength {
+			//免拷贝回调
+			d.callback(data[index : index+d.frameLength])
+			index += d.frameLength
+		}
 	}
 
 	return nil
@@ -135,8 +127,8 @@ func (d *LengthFieldFrameDecoder) Input(data []byte) error {
 type DelimiterFrameDecoder struct {
 	delimiter       []byte //分隔符
 	delimiterLength int    //分隔符长度
-	foundCount      int    //已经匹配到的分割符数量
 
+	foundCount     int //已经匹配到的分割符数量
 	maxFrameLength int //最大帧长度
 
 	cb   func([]byte)
@@ -159,6 +151,7 @@ func NewDelimiterFrameDecoder(maxFrameLength int, delimiter []byte, cb func([]by
 func (d *DelimiterFrameDecoder) Input(data []byte) error {
 	var offset int
 	for i, v := range data {
+		//匹配分隔符
 		if d.delimiter[d.foundCount] != v {
 			d.foundCount = 0
 			continue
@@ -171,8 +164,9 @@ func (d *DelimiterFrameDecoder) Input(data []byte) error {
 
 		//回调数据
 		n := i + 1 - d.delimiterLength
+		//回调缓存数据
 		if d.size > 0 {
-			//拷贝并回调
+			//拷贝本次读取的数据
 			if n > 0 {
 				if d.maxFrameLength < d.size+n {
 					return fmt.Errorf("frame length exceeds %d", d.maxFrameLength)
@@ -181,14 +175,14 @@ func (d *DelimiterFrameDecoder) Input(data []byte) error {
 				copy(d.data[d.size:], data[offset:n])
 				d.size += n
 			} else {
-				//说明缓存包末尾包含分割符
+				//缓存包末尾包含分割符
 				d.size -= n
 			}
 
 			d.cb(d.data[:d.size])
 			d.size = 0
 		} else if n > 0 {
-			//回调当前包的数据
+			//免拷贝回调当前包数据
 			d.cb(data[offset:n])
 		}
 

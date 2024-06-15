@@ -12,32 +12,39 @@ const (
 
 // Handler 传输事件处理器，负责连接传输和断开连接的回调
 type Handler interface {
-	OnConnected(conn net.Conn)
+	// OnConnected 返回收流缓冲区
+	OnConnected(conn net.Conn) []byte
 
-	OnPacket(conn net.Conn, data []byte)
+	// OnPacket 返回收流缓冲区
+	OnPacket(conn net.Conn, data []byte) []byte
 
 	OnDisConnected(conn net.Conn, err error)
 }
 
-type handlerImpl struct {
-	onConnected    func(conn net.Conn)
-	onPacket       func(conn net.Conn, data []byte)
+// 函数回调
+type handler struct {
+	onConnected    func(conn net.Conn) []byte
+	onPacket       func(conn net.Conn, data []byte) []byte
 	onDisConnected func(conn net.Conn, err error)
 }
 
-func (h *handlerImpl) OnConnected(conn net.Conn) {
+func (h *handler) OnConnected(conn net.Conn) []byte {
 	if h.onConnected != nil {
-		h.onConnected(conn)
+		return h.onConnected(conn)
 	}
+
+	return nil
 }
 
-func (h *handlerImpl) OnPacket(conn net.Conn, data []byte) {
+func (h *handler) OnPacket(conn net.Conn, data []byte) []byte {
 	if h.onPacket != nil {
-		h.onPacket(conn, data)
+		return h.onPacket(conn, data)
 	}
+
+	return nil
 }
 
-func (h *handlerImpl) OnDisConnected(conn net.Conn, err error) {
+func (h *handler) OnDisConnected(conn net.Conn, err error) {
 	if h.onDisConnected != nil {
 		h.onDisConnected(conn, err)
 	}
@@ -50,31 +57,31 @@ type ITransport interface {
 
 	SetHandler(handler Handler)
 
-	SetHandler2(onConnected func(conn net.Conn),
-		onPacket func(conn net.Conn, data []byte),
+	SetHandler2(onConnected func(conn net.Conn) []byte,
+		onPacket func(conn net.Conn, data []byte) []byte,
 		onDisConnected func(conn net.Conn, err error))
 }
 
-type transportImpl struct {
+type transport struct {
 	handler Handler
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func (impl *transportImpl) SetHandler(handler Handler) {
+func (impl *transport) SetHandler(handler Handler) {
 	impl.handler = handler
 }
 
-func (impl *transportImpl) SetHandler2(onConnected func(conn net.Conn), onPacket func(conn net.Conn, data []byte), onDisConnected func(conn net.Conn, err error)) {
+func (impl *transport) SetHandler2(onConnected func(conn net.Conn) []byte, onPacket func(conn net.Conn, data []byte) []byte, onDisConnected func(conn net.Conn, err error)) {
 	utils.Assert(impl.handler == nil)
-	impl.SetHandler(&handlerImpl{
+	impl.SetHandler(&handler{
 		onConnected,
 		onPacket,
 		onDisConnected,
 	})
 }
 
-func (impl *transportImpl) Close() {
+func (impl *transport) Close() {
 	impl.cancel()
 }

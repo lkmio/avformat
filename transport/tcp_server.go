@@ -9,7 +9,7 @@ import (
 )
 
 type TCPServer struct {
-	transportImpl
+	transport
 }
 
 func (t *TCPServer) Bind(addr net.Addr) error {
@@ -44,26 +44,36 @@ func (t *TCPServer) accept(listener *net.TCPListener) {
 			continue
 		}
 
-		go recv(t.ctx, tcp, t.handler)
+		go recvTcp(t.ctx, tcp, t.handler)
 	}
 }
 
-func recv(ctx context.Context, conn net.Conn, handler Handler) {
-	extraConn := &Conn{conn: conn, buffer: make([]byte, DefaultTCPRecvBufferSize)}
+func recvTcp(ctx context.Context, conn net.Conn, handler Handler) {
+	extraConn := &Conn{conn: conn, buffer: nil}
 	if handler != nil {
-		handler.OnConnected(extraConn)
+		bytes := handler.OnConnected(extraConn)
+		if bytes == nil {
+			bytes = make([]byte, DefaultTCPRecvBufferSize)
+		}
+
+		extraConn.buffer = bytes
 	}
 
 	var n int
 	var err error
+	var receiveBuffer []byte
 	for ctx.Err() == nil {
-		n, err = conn.Read(extraConn.buffer)
+		if receiveBuffer == nil {
+			receiveBuffer = extraConn.buffer
+		}
+
+		n, err = conn.Read(receiveBuffer)
 		if err != nil {
 			break
 		}
 
 		if n > 0 && handler != nil {
-			handler.OnPacket(extraConn, extraConn.buffer[:n])
+			receiveBuffer = handler.OnPacket(extraConn, extraConn.buffer[:n])
 		}
 	}
 

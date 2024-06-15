@@ -6,7 +6,7 @@ import (
 )
 
 type TCPClient struct {
-	transportImpl
+	transport
 	tcp net.Conn
 }
 
@@ -24,7 +24,7 @@ func (t *TCPClient) Connect(local, addr *net.TCPAddr) error {
 	} else {
 		t.tcp = tcp
 		t.ctx, t.cancel = context.WithCancel(context.Background())
-		go recv(t.ctx, tcp, t.handler)
+		go recvTcp(t.ctx, tcp, t.handler)
 		return nil
 	}
 }

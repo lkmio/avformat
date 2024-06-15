@@ -9,8 +9,8 @@ import (
 	"syscall"
 )
 
-type UDPTransport struct {
-	transportImpl
+type UDPServer struct {
+	transport
 	udp             []net.PacketConn
 	concurrentCount int
 }
@@ -23,54 +23,60 @@ func reusePortControl(network, address string, c syscall.RawConn) error {
 	})
 }
 
-func NewUDPServer(addr net.Addr, handler Handler) (*UDPTransport, error) {
+func NewUDPServer(addr net.Addr, handler Handler) (*UDPServer, error) {
 	count := runtime.NumCPU()
 	if runtime.GOOS == "darwin" {
 		count = 1
 	}
 
-	transport := &UDPTransport{concurrentCount: count}
-	transport.SetHandler(handler)
-	return transport, transport.Bind(addr)
+	server := &UDPServer{concurrentCount: count}
+	server.SetHandler(handler)
+	return server, server.Bind(addr)
 }
 
-func (u *UDPTransport) Bind(addr net.Addr) error {
+func (u *UDPServer) Bind(addr net.Addr) error {
 	utils.Assert(u.handler != nil)
 
 	u.ctx, u.cancel = context.WithCancel(context.Background())
 	u.concurrentCount = libbufio.MaxInt(u.concurrentCount, 1)
+
 	for i := 0; i < u.concurrentCount; i++ {
 		lc := net.ListenConfig{
 			Control: reusePortControl,
 		}
+
 		socket, err := lc.ListenPacket(u.ctx, "udp", addr.String())
 		if err != nil {
 			return err
 		}
 
 		u.udp = append(u.udp, socket)
-		go recv2(u.ctx, socket, u.handler)
+		go recvUdp(u.ctx, socket, u.handler)
 	}
 
 	return nil
 }
 
-func (u *UDPTransport) Send(data []byte, addr net.Addr) (int, error) {
+func (u *UDPServer) Send(data []byte, addr net.Addr) (int, error) {
 	return u.udp[0].WriteTo(data, addr)
 }
 
-func recv2(ctx context.Context, conn net.PacketConn, handler Handler) {
+func recvUdp(ctx context.Context, conn net.PacketConn, handler Handler) {
 	bytes := make([]byte, 1500)
-
+	//音视频UDP收流都使用jitter buffer处理, 难免还是会拷贝一次, 所以UDP不使用外部的读取缓冲区.
 	for ctx.Err() == nil {
 		n, addr, err := conn.ReadFrom(bytes)
 		if err != nil {
-			continue
+			println(err.Error())
+
+			if n == 0 {
+				break
+			}
 		}
 
 		if n > 0 && handler != nil {
-			udpConn := &UDPConn{conn, conn.LocalAddr(), addr}
-			handler.OnPacket(udpConn, bytes[:n])
+			c := &Conn{conn: &UDPConn{conn, conn.LocalAddr(), addr}, closeCb: handler.OnDisConnected}
+			handler.OnPacket(c, bytes[:n])
 		}
 	}
 

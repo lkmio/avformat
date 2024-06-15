@@ -28,6 +28,10 @@ func (c *UDPConn) LocalAddr() net.Addr {
 	return c.local
 }
 
+func (c *UDPConn) Close() error {
+	return nil
+}
+
 func (c *UDPConn) RemoteAddr() net.Addr {
 	return c.remote
 }
