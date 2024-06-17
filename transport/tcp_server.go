@@ -73,7 +73,7 @@ func recvTcp(ctx context.Context, conn net.Conn, handler Handler) {
 		}
 
 		if n > 0 && handler != nil {
-			receiveBuffer = handler.OnPacket(extraConn, extraConn.buffer[:n])
+			receiveBuffer = handler.OnPacket(extraConn, receiveBuffer[:n])
 		}
 	}
 

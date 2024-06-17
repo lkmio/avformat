@@ -68,7 +68,7 @@ func NewLengthFieldFrameDecoder(maxFrameLength, fieldLength int, cb func([]byte)
 }
 
 func (d *LengthFieldFrameDecoder) callback(data []byte) {
-	d.callback(data)
+	d.cb(data)
 
 	//清空标记,重新读取
 	d.frameLength = 0
@@ -115,8 +115,8 @@ func (d *LengthFieldFrameDecoder) Input(data []byte) error {
 			d.size = 0
 		} else if n >= d.frameLength {
 			//免拷贝回调
-			d.callback(data[index : index+d.frameLength])
 			index += d.frameLength
+			d.callback(data[index-d.frameLength : index])
 		}
 	}
 
