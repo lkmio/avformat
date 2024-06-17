@@ -18,16 +18,20 @@ type RtpSender struct {
 	OctetCount int
 }
 
-func (s *RtpSender) OnRTPPacket(conn net.Conn, data []byte) {
+func (s *RtpSender) OnRTPPacket(conn net.Conn, data []byte) []byte {
 	if s.RtpConn == nil {
 		s.RtpConn = conn
 	}
+
+	return nil
 }
 
-func (s *RtpSender) OnRTCPPacket(conn net.Conn, data []byte) {
+func (s *RtpSender) OnRTCPPacket(conn net.Conn, data []byte) []byte {
 	if s.RtcpConn == nil {
 		s.RtcpConn = conn
 	}
+
+	return nil
 
 	//packs, err := rtcp.Unmarshal(data)
 	//if err != nil {
