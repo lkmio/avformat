@@ -6,25 +6,24 @@ import (
 )
 
 type Parser struct {
-	state     ParserState
-	chunkType ChunkType
-	csid      ChunkStreamID
-	csidSize  int
-	//headerSize        int
+	state ParserState
+
+	csidSize     int
 	headerOffset int
 	extended     bool
 
-	chunks map[ChunkStreamID]*Chunk
-	chunk  *Chunk
+	chunks       []*Chunk
+	currentChunk Chunk
+	audioChunk   Chunk
+	videoChunk   Chunk
 
-	partPacketCB func(data []byte)
-
-	//chunk大小 默认128
-	chunkSize int
+	partPacketCB    func(chunk *Chunk, data []byte)
+	localChunkSize  int //(我方)发送消息的chunk大小 默认128
+	remoteChunkSize int //(对方)解析消息的chunk大小 默认128
 }
 
-func NewParser(chunkSize int) *Parser {
-	return &Parser{chunkSize: chunkSize, chunks: make(map[ChunkStreamID]*Chunk, 10)}
+func NewParser() *Parser {
+	return &Parser{localChunkSize: DefaultChunkSize, remoteChunkSize: DefaultChunkSize}
 }
 
 func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
@@ -38,38 +37,30 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 				return nil, -1, fmt.Errorf("unknow chunk type:%d", int(t))
 			}
 
+			p.currentChunk.csid = 0
 			if data[i]&0x3F == 0 {
 				p.csidSize = 1
 			} else if data[i]&0x3F == 1 {
 				p.csidSize = 2
 			} else {
 				p.csidSize = 0
-				p.csid = ChunkStreamID(data[i] & 0x3F)
+				p.currentChunk.csid = ChunkStreamID(data[i] & 0x3F)
 			}
 
-			p.chunkType = t
-			//p.headerSize = headerSize[p.type_]
+			p.currentChunk.type_ = t
 			p.state = ParserStateBasicHeader
 			i++
 			break
 
 		case ParserStateBasicHeader:
 			for ; p.csidSize > 0 && i < length; i++ {
-				p.csid <<= 8
-				p.csid |= ChunkStreamID(data[i])
+				p.currentChunk.csid <<= 8
+				p.currentChunk.csid |= ChunkStreamID(data[i])
 				p.csidSize--
 			}
 
 			if p.csidSize == 0 {
-				chunk := p.chunks[p.csid]
-				//message := p.findMessage(p.csid)
-				if chunk == nil {
-					chunk = &Chunk{type_: p.chunkType, csid: p.csid}
-					p.chunks[p.csid] = chunk
-				}
-
-				p.chunk = chunk
-				if p.chunkType < ChunkType3 {
+				if p.currentChunk.type_ < ChunkType3 {
 					p.state = ParserStateTimestamp
 					p.headerOffset = 0
 				} else {
@@ -80,14 +71,15 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateTimestamp:
 			for ; p.headerOffset < 3 && i < length; i++ {
-				p.chunk.Timestamp <<= 8
-				p.chunk.Timestamp |= uint32(data[i])
+				p.currentChunk.Timestamp <<= 8
+				p.currentChunk.Timestamp |= uint32(data[i])
 				p.headerOffset++
 			}
 
 			if p.headerOffset == 3 {
-				p.extended = p.chunk.Timestamp == 0xFFFFFF
-				if p.chunkType < ChunkType2 {
+				p.currentChunk.Timestamp &= 0xFFFFFF
+				p.extended = p.currentChunk.Timestamp == 0xFFFFFF
+				if p.currentChunk.type_ < ChunkType2 {
 					p.state = ParserStateMessageLength
 				} else if p.extended {
 					p.state = ParserStateExtendedTimestamp
@@ -99,23 +91,23 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateMessageLength:
 			for ; p.headerOffset < 6 && i < length; i++ {
-				p.chunk.Length <<= 8
-				p.chunk.Length |= int(data[i])
+				p.currentChunk.Length <<= 8
+				p.currentChunk.Length |= int(data[i])
 				p.headerOffset++
 			}
 
 			if p.headerOffset == 6 {
 				//24位有效
-				p.chunk.Length &= 0x00FFFFFF
+				p.currentChunk.Length &= 0x00FFFFFF
 				p.state = ParserStateStreamType
 			}
 			break
 
 		case ParserStateStreamType:
-			p.chunk.tid = MessageTypeID(data[i])
+			p.currentChunk.tid = MessageTypeID(data[i])
 			i++
 			p.headerOffset++
-			if p.chunkType == ChunkType0 {
+			if p.currentChunk.type_ == ChunkType0 {
 				p.state = ParserStateStreamId
 			} else if p.extended {
 				p.state = ParserStateExtendedTimestamp
@@ -126,8 +118,8 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateStreamId:
 			for ; p.headerOffset < 11 && i < length; i++ {
-				p.chunk.sid <<= 8
-				p.chunk.sid |= int(data[i])
+				p.currentChunk.sid <<= 8
+				p.currentChunk.sid |= uint32(data[i])
 				p.headerOffset++
 			}
 
@@ -142,8 +134,8 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateExtendedTimestamp:
 			for ; p.headerOffset < 15 && i < length; i++ {
-				p.chunk.Timestamp <<= 8
-				p.chunk.Timestamp |= uint32(data[i])
+				p.currentChunk.Timestamp <<= 8
+				p.currentChunk.Timestamp |= uint32(data[i])
 				p.headerOffset++
 			}
 
@@ -155,36 +147,84 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 		case ParserStatePayload:
 			rest := length - i
 
-			if p.chunk.Length == 0 {
+			var chunk *Chunk
+
+			if MessageTypeIDAudio == p.currentChunk.tid || (p.currentChunk.tid == 0 && ChunkStreamIdAudio == p.currentChunk.csid) {
+				chunk = &p.audioChunk
+				chunk.tid = MessageTypeIDAudio
+			} else if MessageTypeIDVideo == p.currentChunk.tid || (p.currentChunk.tid == 0 && ChunkStreamIdVideo == p.currentChunk.csid) {
+				chunk = &p.videoChunk
+				chunk.tid = MessageTypeIDVideo
+			} else {
+				//根据tid匹配chunk
+				if p.currentChunk.tid != 0 {
+					for _, c := range p.chunks {
+						if c.tid == p.currentChunk.tid {
+							chunk = c
+							break
+						}
+					}
+				}
+
+				//根据csid匹配chunk
+				if chunk == nil {
+					for _, c := range p.chunks {
+						if c.csid == p.currentChunk.csid {
+							chunk = c
+							break
+						}
+					}
+				}
+
+				if chunk == nil {
+					chunk = &Chunk{}
+					*chunk = p.currentChunk
+					p.chunks = append(p.chunks, chunk)
+				}
+			}
+
+			if p.currentChunk.Timestamp > 0 && p.currentChunk.Timestamp != chunk.Timestamp {
+				chunk.Timestamp = p.currentChunk.Timestamp
+			}
+			if p.currentChunk.Length > 0 && p.currentChunk.Length != chunk.Length {
+				chunk.Length = p.currentChunk.Length
+			}
+
+			chunk.type_ = p.currentChunk.type_
+			chunk.sid = p.currentChunk.sid
+
+			if chunk.Length == 0 {
+				//p.Reset()
+				//continue
 				return nil, -1, fmt.Errorf("bad message. the length of an rtmp message cannot be zero")
 			}
 
-			need := p.chunk.Length - p.chunk.size
-			consume := libbufio.MinInt(need, p.chunkSize-(p.chunk.size%p.chunkSize))
+			need := chunk.Length - chunk.size
+			consume := libbufio.MinInt(need, p.remoteChunkSize-(chunk.size%p.remoteChunkSize))
 			consume = libbufio.MinInt(consume, rest)
 
-			if (MessageTypeIDAudio == p.chunk.tid || MessageTypeIDVideo == p.chunk.tid) && p.partPacketCB != nil {
-				p.partPacketCB(data[i : i+consume])
+			//实际推流中发现, obs音视频chunk包的csid都为4, 所以csid不能关联chunk. ffmpeg推流, 可能前面携带tid, 后面的包不携带tid, 所以此时要参考csid.
+			if (&p.audioChunk == chunk || &p.videoChunk == chunk) && p.partPacketCB != nil {
+				p.partPacketCB(chunk, data[i:i+consume])
 			} else {
-				if len(p.chunk.data) < p.chunk.Length {
-					bytes := make([]byte, p.chunk.Length+1024)
-					copy(bytes, p.chunk.data[:p.chunk.size])
-					p.chunk.data = bytes
+				if len(chunk.data) < chunk.Length {
+					bytes := make([]byte, chunk.Length+1024)
+					copy(bytes, chunk.data[:chunk.size])
+					chunk.data = bytes
 				}
 
-				copy(p.chunk.data[p.chunk.size:], data[i:i+consume])
+				copy(chunk.data[chunk.size:], data[i:i+consume])
 			}
 
-			p.chunk.size += consume
-
+			chunk.size += consume
 			i += consume
-			if p.chunk.size >= p.chunk.Length {
+
+			if chunk.size >= chunk.Length {
 				p.state = ParserStateInit
-				return p.chunk, i, nil
-			} else if p.chunk.size%p.chunkSize == 0 {
+				return chunk, i, nil
+			} else if chunk.size%p.remoteChunkSize == 0 {
 				p.state = ParserStateInit
 			}
-
 			break
 		}
 	}
@@ -193,11 +233,13 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 }
 
 func (p *Parser) Reset() {
-	p.chunk.Reset()
+	p.currentChunk.Reset()
+	p.currentChunk.Length = 0
+	p.currentChunk.csid = 0
+	p.currentChunk.tid = 0
+
 	p.state = ParserStateInit
 	p.csidSize = 0
 	p.headerOffset = 0
-	p.chunkType = ChunkType0
-	p.csid = 0
 	p.extended = false
 }

@@ -306,7 +306,7 @@ func (p *Puller) play(streamId float64) {
 		Timestamp: 0,
 		Length:    length,
 		tid:       MessageTypeIDCommandAMF0,
-		sid:       int(streamId),
+		sid:       uint32(streamId),
 	}
 
 	p.sendMessage(chunk, bytes[:length])
@@ -447,7 +447,7 @@ func (p *Puller) processChunk(data []byte) error {
 			case ParserStatePayload:
 				remain := length - i
 				need := p.parser.msg.MessageLength - p.parser.msg.size
-				consume := utils.MinInt(need, p.chunkSize-(p.parser.msg.size%p.chunkSize))
+				consume := utils.MinInt(need, p.localChunkSize-(p.parser.msg.size%p.localChunkSize))
 				consume = utils.MinInt(consume, remain)
 				if len(p.parser.msg.payload) < p.parser.msg.MessageLength {
 					bytes := make([]byte, p.parser.msg.MessageLength+1024)
@@ -468,7 +468,7 @@ func (p *Puller) processChunk(data []byte) error {
 
 					*p.parser.msg = Chunk{}
 					p.parser.state = ParserStateInit
-				} else if p.parser.msg.size%p.chunkSize == 0 {
+				} else if p.parser.msg.size%p.localChunkSize == 0 {
 					p.parser.state = ParserStateInit
 				}
 

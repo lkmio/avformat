@@ -112,7 +112,7 @@ type Chunk struct {
 	//表明的chunk长度
 	Length int           //message length
 	tid    MessageTypeID //message type id
-	sid    int           //message stream id. customized by users. LittleEndian
+	sid    uint32        //message stream id. customized by users. LittleEndian
 
 	//body
 	data []byte
@@ -254,9 +254,11 @@ func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
 }
 
 func (h *Chunk) Reset() {
-	//c.csid = 0
+	//h.csid = 0
 	h.Timestamp = 0
-	//c.Length	 = 0
+	//如果当前包没有携带length字段, 默认和前一包一致
+	//h.Length = 0
+	//如果当前包没有携带tid字段, 默认和前一包一致
 	//h.tid = 0
 	h.sid = 0
 	h.size = 0
@@ -286,7 +288,7 @@ func readChunkHeader(src []byte) (Chunk, int, error) {
 	}
 
 	if header.type_ < ChunkType1 {
-		header.sid = int(binary.LittleEndian.Uint32(src[i:]))
+		header.sid = binary.LittleEndian.Uint32(src[i:])
 		i += 4
 	}
 

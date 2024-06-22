@@ -72,25 +72,25 @@ type Stack struct {
 
 func NewStack(handler OnEventHandler) *Stack {
 	utils.Assert(handler != nil)
-	return &Stack{parser: NewParser(DefaultChunkSize), handler: handler,
+	return &Stack{parser: NewParser(), handler: handler,
 		audioStreamIndex: -1,
 		videoStreamIndex: -1}
 }
 
 func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
-	s.parser.partPacketCB = func(data []byte) {
-		if ChunkStreamIdAudio == s.parser.chunk.csid {
+	s.parser.partPacketCB = func(chunk *Chunk, data []byte) {
+		if MessageTypeIDAudio == chunk.tid {
 			if s.audioStreamIndex == -1 {
 				s.audioStreamIndex = libbufio.MaxInt(s.videoStreamIndex, -1) + 1
 			}
 
-			s.publisherHandler.OnPartPacket(s.audioStreamIndex, utils.AVMediaTypeAudio, data, s.parser.chunk.size == 0)
+			s.publisherHandler.OnPartPacket(s.audioStreamIndex, utils.AVMediaTypeAudio, data, chunk.size == 0)
 		} else {
 			if s.videoStreamIndex == -1 {
 				s.videoStreamIndex = libbufio.MaxInt(s.audioStreamIndex, -1) + 1
 			}
 
-			s.publisherHandler.OnPartPacket(s.videoStreamIndex, utils.AVMediaTypeVideo, data, s.parser.chunk.size == 0)
+			s.publisherHandler.OnPartPacket(s.videoStreamIndex, utils.AVMediaTypeVideo, data, chunk.size == 0)
 		}
 	}
 	s.publisherHandler = handler
@@ -198,6 +198,7 @@ func (s *Stack) Input(conn net.Conn, data []byte) error {
 			return err
 		}
 
+		chunk.Reset()
 		s.parser.Reset()
 		consume += n
 	}
@@ -209,7 +210,7 @@ func (s *Stack) SendChunks(conn net.Conn, chunks ...Chunk) error {
 	var tmp [1024]byte
 	var n int
 	for i := 0; i < len(chunks); i++ {
-		consume := chunks[i].ToBytes2(tmp[n:], s.parser.chunkSize)
+		consume := chunks[i].ToBytes2(tmp[n:], s.parser.localChunkSize)
 		n += consume
 	}
 
@@ -220,7 +221,7 @@ func (s *Stack) SendChunks(conn net.Conn, chunks ...Chunk) error {
 func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 	switch chunk.tid {
 	case MessageTypeIDSetChunkSize:
-		//s.parser.chunkSize = utils.BytesToInt(chunk.data)
+		s.parser.remoteChunkSize = int(binary.BigEndian.Uint32(chunk.data))
 		break
 	case MessageTypeIDAbortMessage:
 		break
@@ -389,7 +390,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			}
 
 			err = s.SendChunks(conn, acknow, bandwidth, response, setChunkSize)
-			s.parser.chunkSize = ChunkSize
+			s.parser.localChunkSize = ChunkSize
 			return err
 		} else if MessageFcPublish == command {
 
