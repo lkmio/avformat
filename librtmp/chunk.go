@@ -255,7 +255,8 @@ func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
 
 func (h *Chunk) Reset() {
 	//h.csid = 0
-	h.Timestamp = 0
+	//如果当前包没有携带timestamp字段, 默认和前一包一致
+	//h.Timestamp = 0
 	//如果当前包没有携带length字段, 默认和前一包一致
 	//h.Length = 0
 	//如果当前包没有携带tid字段, 默认和前一包一致

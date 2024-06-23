@@ -183,14 +183,18 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 				}
 			}
 
-			if p.currentChunk.Timestamp > 0 && p.currentChunk.Timestamp != chunk.Timestamp {
-				chunk.Timestamp = p.currentChunk.Timestamp
-			}
 			if p.currentChunk.Length > 0 && p.currentChunk.Length != chunk.Length {
 				chunk.Length = p.currentChunk.Length
 			}
 
-			chunk.type_ = p.currentChunk.type_
+			//以第一包的type为准
+			if chunk.size == 0 {
+				chunk.type_ = p.currentChunk.type_
+			}
+			if p.currentChunk.Timestamp > 0 {
+				chunk.Timestamp = p.currentChunk.Timestamp
+			}
+
 			chunk.sid = p.currentChunk.sid
 
 			if chunk.Length == 0 {
@@ -235,6 +239,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 func (p *Parser) Reset() {
 	p.currentChunk.Reset()
 	p.currentChunk.Length = 0
+	p.currentChunk.Timestamp = 0
 	p.currentChunk.csid = 0
 	p.currentChunk.tid = 0
 

@@ -12,8 +12,6 @@ type TagType byte
 type VideoCodecId uint32
 type SoundFormat byte
 type SoundRate byte
-type TSMode byte
-
 type PacketType byte
 
 const (
@@ -42,9 +40,6 @@ const (
 	SoundRate11000HZ = SoundRate(1)
 	SoundRate22000HZ = SoundRate(2)
 	SoundRate44000HZ = SoundRate(3) //For AAC:always 3
-
-	TSModeAbsolute = TSMode(1)
-	TSModeRelative = TSMode(2)
 
 	AACFrameSize = 1024
 	MP3FrameSize = 1152
@@ -102,7 +97,6 @@ type deMuxer struct {
 	videoTs int64
 
 	completed bool
-	tsMode    TSMode
 
 	videoStream utils.AVStream
 	audioStream utils.AVStream
@@ -118,8 +112,8 @@ type Tag struct {
 	size int
 }
 
-func NewDeMuxer(tsMode TSMode) DeMuxer {
-	return &deMuxer{audioIndex: -1, videoIndex: -1, tsMode: tsMode}
+func NewDeMuxer() DeMuxer {
+	return &deMuxer{audioIndex: -1, videoIndex: -1}
 }
 
 func (d *deMuxer) readScriptDataObject(data []byte) error {
@@ -315,15 +309,8 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			return fmt.Errorf("missing video sequence header")
 		}
 
-		var duration int64
-		if TSModeAbsolute == d.tsMode {
-			duration = int64(ts) - d.videoTs
-			d.videoTs = int64(ts)
-		} else {
-			d.videoTs += int64(ts)
-			duration = int64(ts)
-		}
-
+		var duration = int64(ts) - d.videoTs
+		d.videoTs = int64(ts)
 		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex, 1000)
 		packet.SetDuration(duration)
 		d.Handler.OnDeMuxPacket(packet)
@@ -372,24 +359,9 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 		return fmt.Errorf("missing audio sequence header")
 	}
 
-	var duration int64
-	if TSModeAbsolute == d.tsMode {
-		duration = int64(ts) - d.audioTs
-		d.audioTs = int64(ts)
-	} else {
-		d.audioTs += int64(ts)
-		duration = int64(ts)
-	}
-
-	timeBase := 1000
-	curTs := d.audioTs
-	if d.audioStream.CodecId() == utils.AVCodecIdAAC {
-		curTs = utils.ConvertTs(d.audioTs, 1000, AACFrameSize)
-		duration += curTs - d.audioTs
-		timeBase = AACFrameSize
-	}
-
-	packet := utils.NewAudioPacket(data[n:], curTs, curTs, codecId, d.audioIndex, timeBase)
+	var duration = int64(ts) - d.audioTs
+	d.audioTs = int64(ts)
+	packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex, 1000)
 	packet.SetDuration(duration)
 	d.Handler.OnDeMuxPacket(packet)
 

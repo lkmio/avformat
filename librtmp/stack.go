@@ -68,6 +68,8 @@ type Stack struct {
 
 	audioStreamIndex int
 	videoStreamIndex int
+	audioTimestamp   uint32
+	videoTimestamp   uint32
 }
 
 func NewStack(handler OnEventHandler) *Stack {
@@ -242,18 +244,30 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 		//p.sendWindowAcknowledgementSize()
 		break
 	case MessageTypeIDAudio:
-		if s.publisherHandler == nil {
-			s.publisherHandler.OnAudio(s.audioStreamIndex, chunk.data[:chunk.Length], chunk.Timestamp)
+		if ChunkType0 == chunk.type_ {
+			s.audioTimestamp = chunk.Timestamp
 		} else {
-			s.publisherHandler.OnAudio(s.audioStreamIndex, nil, chunk.Timestamp)
+			s.audioTimestamp += chunk.Timestamp
+		}
+
+		if s.publisherHandler == nil {
+			s.publisherHandler.OnAudio(s.audioStreamIndex, chunk.data[:chunk.Length], s.audioTimestamp)
+		} else {
+			s.publisherHandler.OnAudio(s.audioStreamIndex, nil, s.audioTimestamp)
 		}
 
 		break
 	case MessageTypeIDVideo:
-		if s.publisherHandler == nil {
-			s.publisherHandler.OnVideo(s.videoStreamIndex, chunk.data[:chunk.Length], chunk.Timestamp)
+		if ChunkType0 == chunk.type_ {
+			s.videoTimestamp = chunk.Timestamp
 		} else {
-			s.publisherHandler.OnVideo(s.videoStreamIndex, nil, chunk.Timestamp)
+			s.videoTimestamp += chunk.Timestamp
+		}
+
+		if s.publisherHandler == nil {
+			s.publisherHandler.OnVideo(s.videoStreamIndex, chunk.data[:chunk.Length], s.videoTimestamp)
+		} else {
+			s.publisherHandler.OnVideo(s.videoStreamIndex, nil, s.videoTimestamp)
 		}
 
 		break
