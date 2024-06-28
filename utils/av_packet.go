@@ -134,7 +134,7 @@ func (pkt *avPacket) AnnexBPacketData(stream AVStream) []byte {
 	} else if AVCodecIdH265 == pkt.codecId {
 		var err error
 
-		lengthSize := stream.CodecParameters().DecoderConfRecord().LengthSize()
+		lengthSize := stream.CodecParameters().(*HEVCCodecData).Record.LengthSizeMinusOne
 		n, err = libhevc.Mp4ToAnnexB(bytes, pkt.data, nil, int(lengthSize))
 		if err != nil {
 			panic(err)

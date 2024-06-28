@@ -30,6 +30,8 @@ type TSMuxer interface {
 	TrackCount() int
 
 	Duration() int64
+
+	Close()
 }
 
 func NewTSMuxer() TSMuxer {
@@ -253,4 +255,9 @@ func (t *tsMuxer) TrackCount() int {
 
 func (t *tsMuxer) Duration() int64 {
 	return t.endTS - t.startTS
+}
+
+func (t *tsMuxer) Close() {
+	t.allocHandler = nil
+	t.writeHandler = nil
 }

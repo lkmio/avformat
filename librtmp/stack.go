@@ -50,7 +50,6 @@ type OnPublishHandler interface {
 }
 
 type Stack struct {
-	buffer         libbufio.ByteBuffer
 	handshakeState HandshakeState
 	parser         *Parser
 
@@ -531,7 +530,8 @@ func (s *Stack) sendStatus(conn net.Conn, transactionId float64, level, code, de
 }
 
 func (s *Stack) Close() {
-
+	s.handler = nil
+	s.publisherHandler = nil
 }
 
 func (s *Stack) MetaData() map[string]interface{} {

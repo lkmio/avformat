@@ -17,6 +17,8 @@ type DeMuxer interface {
 	Input(data []byte /*, vod interface{}*/) (int, error)
 
 	SetHandler(handler OnDeMuxerHandler)
+
+	Close()
 }
 
 type DeMuxerImpl struct {

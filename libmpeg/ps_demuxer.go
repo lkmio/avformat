@@ -200,6 +200,6 @@ func NewPSDeMuxer() *PSDeMuxer {
 		systemHeader:     &SystemHeader{},
 		programStreamMap: &ProgramStreamMap{},
 		pesHeader:        &PESHeader{},
-		reader:           libbufio.NewByteReader(nil),
+		reader:           libbufio.NewBytesReader(nil),
 	}
 }

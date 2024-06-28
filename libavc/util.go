@@ -11,10 +11,7 @@ var (
 	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
-type PPSInfo struct {
-}
-
-// FindStartCode 返回的是NalUHeader的位置
+// FindStartCode 返回NalUHeader位置
 func FindStartCode(p []byte) int {
 	length := len(p)
 	i := 2
@@ -51,7 +48,7 @@ func FindStartCodeWithReader(reader libbufio.BytesReader) int {
 	return int(data[index])
 }
 
-// FindStartCode2 返回的是start code的起始位置
+// FindStartCode2 返回start code的起始位置
 func FindStartCode2(p []byte) int {
 	index := FindStartCode(p)
 	if index < 0 {
@@ -69,30 +66,6 @@ func FindStartCode2(p []byte) int {
 	}
 }
 
-func FindStartCodeFromBuffer(buffer libbufio.ByteBuffer, offset int) int {
-	length := buffer.Size()
-	i := offset + 2
-
-	for i < length {
-		if buffer.At(i) > 1 {
-			i += 3
-		} else if buffer.At(i-1) != 0 {
-			i += 2
-		} else if (buffer.At(i-2) | (buffer.At(i) - 1)) != 0 {
-			i++
-		} else {
-			i++
-			break
-		}
-	}
-
-	if i < length {
-		return i
-	} else {
-		return -1
-	}
-}
-
 func IsKeyFrame(p []byte) bool {
 	index := 0
 	for {
@@ -101,31 +74,6 @@ func IsKeyFrame(p []byte) bool {
 			return false
 		}
 		state := p[index]
-		switch state & 0x1F {
-		case H264NalSPS:
-			break
-		case H264NalPPS:
-			break
-		case H264NalSEI:
-			break
-		case H264NalIDRSlice:
-			return true
-		case H264NalSlice:
-			return false
-		default:
-			return false
-		}
-	}
-}
-
-func IsKeyFrameFromBuffer(buffer libbufio.ByteBuffer) bool {
-	index := 0
-	for {
-		index = FindStartCodeFromBuffer(buffer, index)
-		if index < 0 {
-			return false
-		}
-		state := buffer.At(index)
 		switch state & 0x1F {
 		case H264NalSPS:
 			break
@@ -199,24 +147,6 @@ func copyNalU(buffer libbufio.ByteBuffer, data []byte, outSize int, append bool)
 	buffer.Write(data)
 
 	return startCodeSize + len(data)
-}
-
-type MPEG4AVCConfig struct {
-	Version       byte
-	Profile       byte
-	Compatibility byte
-	Level         byte
-	LengthSize    byte
-	SpsNum        byte
-	PpsNum        byte
-	Sps           [][]byte
-	Pps           [][]byte
-
-	ChromaFormat                 byte //2 bits
-	BitDepthLumaMinus8           byte //3 bits
-	BitDepthChromaMinus8         byte //3 bits
-	NumOfSequenceParameterSetExt byte //8 bits
-	SpsExtNALUnit                [][]byte
 }
 
 func AVCC2AnnexB(dst []byte, avcc []byte, extra []byte) int {
@@ -369,14 +299,15 @@ func SplitNalU(data []byte, cb func(nalu []byte)) {
 }
 
 func RemoveStartCode(data []byte) []byte {
-	//utils.Assert(data[0] == 0x0 && data[1] == 0x0)
-
-	if data[2] == 0x1 {
+	if data[0] != 0 || data[1] != 0 {
+		return data
+	} else if data[2] == 0x1 {
 		return data[3:]
+	} else if data[2] == 0x0 && data[3] == 0x1 {
+		return data[4:]
 	}
 
-	//utils.Assert(data[2] == 0x0 && data[3] == 0x1)
-	return data[4:]
+	return data
 }
 
 // ParseExtraDataFromKeyNALU 从关键帧中解析出sps/pss
@@ -401,72 +332,4 @@ func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, error) {
 		return nil, nil, fmt.Errorf("not find extra data for H264")
 	}
 	return sps, pps, nil
-}
-
-/*aligned(8) class AVCDecoderConfigurationRecord {
-unsigned int(8) configurationVersion = 1;
-unsigned int(8) AVCProfileIndication;
-unsigned int(8) profile_compatibility;
-unsigned int(8) AVCLevelIndication;
-bit(6) reserved = ‘111111’b;
-unsigned int(2) lengthSizeMinusOne;
-bit(3) reserved = ‘111’b;
-unsigned int(5) numOfSequenceParameterSets;
-for (i=0; i< numOfSequenceParameterSets; i++) {
-unsigned int(16) sequenceParameterSetLength ;
-bit(8*sequenceParameterSetLength) sequenceParameterSetNALUnit;
-}
-unsigned int(8) numOfPictureParameterSets;
-for (i=0; i< numOfPictureParameterSets; i++) {
-unsigned int(16) pictureParameterSetLength;
-bit(8*pictureParameterSetLength) pictureParameterSetNALUnit;
-}
-if( profile_idc == 100 || profile_idc == 110 ||
-profile_idc == 122 || profile_idc == 144 )
-{
-bit(6) reserved = ‘111111’b;
-unsigned int(2) chroma_format;
-bit(5) reserved = ‘11111’b;
-unsigned int(3) bit_depth_luma_minus8;
-bit(5) reserved = ‘11111’b;
-unsigned int(3) bit_depth_chroma_minus8;
-unsigned int(8) numOfSequenceParameterSetExt;
-for (i=0; i< numOfSequenceParameterSetExt; i++) {
-unsigned int(16) sequenceParameterSetExtLength;
-bit(8*sequenceParameterSetExtLength) sequenceParameterSetExtNALUnit;
-}
-}
-}*/
-
-func ParseDecoderConfigurationRecord(data []byte) (*MPEG4AVCConfig, error) {
-	config := &MPEG4AVCConfig{}
-	config.Version = data[0]
-	config.Profile = data[1]
-	config.Compatibility = data[2]
-	config.Level = data[3]
-	config.LengthSize = data[4] & 0x3
-
-	spsNum := data[5] & 0x1F
-	config.Sps = make([][]byte, spsNum)
-	index := 6
-	for i := 0; i < int(spsNum); i++ {
-		length := int(data[index])<<8 | int(data[index+1])
-		index += 2 + length
-		bytes := make([]byte, length)
-		copy(bytes, data[index-length:index])
-		config.Sps[i] = bytes
-	}
-
-	ppsNum := data[index]
-	config.Pps = make([][]byte, ppsNum)
-	index += 1
-	for i := 0; i < int(ppsNum); i++ {
-		length := int(data[index])<<8 | int(data[index+1])
-		index += 2 + length
-		bytes := make([]byte, length)
-		copy(bytes, data[index-length:index])
-		config.Pps[i] = bytes
-	}
-
-	return config, nil
 }

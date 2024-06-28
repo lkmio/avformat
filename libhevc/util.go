@@ -3,7 +3,6 @@ package libhevc
 import (
 	"fmt"
 	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libbufio"
 )
 
 var (
@@ -11,29 +10,29 @@ var (
 	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
-func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
-	dstBuffer := libbufio.NewByteBuffer()
-	buffer := libbufio.NewByteBuffer(src)
-	buffer.Skip(21)
-	lengthSize := buffer.ReadUInt8()&3 + 1
-	arrays := int(buffer.ReadUInt8())
-	for i := 0; i < arrays; i++ {
-		t := HEVCNALUnitType(buffer.ReadUInt8() >> 1 & 0x3F)
-		count := int(buffer.ReadUInt16())
-		if t != HevcNalVPS && t != HevcNalSPS && t != HevcNalPPS && t != HevcNalSeiPPrefix && t != HevcNalSeiSuffix {
-			return nil, -1, fmt.Errorf("invalid NAL unit type in extradata:%d", t)
-		}
-		for j := 0; j < count; j++ {
-			nalUnitLen := int(buffer.ReadUInt16())
-			dstBuffer.Write(StartCode4)
-			offset := buffer.ReadOffset()
-			dstBuffer.Write(src[offset : offset+nalUnitLen])
-			buffer.Skip(nalUnitLen)
-		}
-	}
-
-	return dstBuffer.ToBytes(), int(lengthSize), nil
-}
+//func ExtraDataToAnnexB(src []byte) ([]byte, int, error) {
+//	dstBuffer := libbufio.NewByteBuffer()
+//	buffer := libbufio.NewByteBuffer(src)
+//	buffer.Skip(21)
+//	lengthSize := buffer.ReadUInt8()&3 + 1
+//	arrays := int(buffer.ReadUInt8())
+//	for i := 0; i < arrays; i++ {
+//		t := HEVCNALUnitType(buffer.ReadUInt8() >> 1 & 0x3F)
+//		count := int(buffer.ReadUInt16())
+//		if t != HevcNalVPS && t != HevcNalSPS && t != HevcNalPPS && t != HevcNalSeiPPrefix && t != HevcNalSeiSuffix {
+//			return nil, -1, fmt.Errorf("invalid NAL unit type in extradata:%d", t)
+//		}
+//		for j := 0; j < count; j++ {
+//			nalUnitLen := int(buffer.ReadUInt16())
+//			dstBuffer.Write(StartCode4)
+//			offset := buffer.ReadOffset()
+//			dstBuffer.Write(src[offset : offset+nalUnitLen])
+//			buffer.Skip(nalUnitLen)
+//		}
+//	}
+//
+//	return dstBuffer.ToBytes(), int(lengthSize), nil
+//}
 
 func Mp4ToAnnexB(dst []byte, data, extra []byte, lengthSize int) (int, error) {
 	var n int
