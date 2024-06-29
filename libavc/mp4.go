@@ -90,7 +90,7 @@ func (a *AVCDecoderConfigurationRecord) Marshal(spsList, ppsList [][]byte) ([]by
 	bytes[3] = noStartCodeSps[5]
 	bytes[4] = 0xff
 	bytes[5] = 0xE0 | byte(len(spsList))
-	return nil, nil
+	return bytes[:writer.Offset()], nil
 }
 
 func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
