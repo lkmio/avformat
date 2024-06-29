@@ -69,6 +69,7 @@ type Stack struct {
 	videoStreamIndex int
 	audioTimestamp   uint32
 	videoTimestamp   uint32
+	playStreamId     uint32
 }
 
 func NewStack(handler OnEventHandler) *Stack {
@@ -463,6 +464,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				}
 			}
 
+			s.playStreamId = chunk.sid
 			state := make(chan utils.HookState, 1)
 			s.handler.OnPlay(s.app, s.stream, state)
 
@@ -536,4 +538,44 @@ func (s *Stack) Close() {
 
 func (s *Stack) MetaData() map[string]interface{} {
 	return s.metaData
+}
+
+func (s *Stack) SendStreamBeginChunk(conn net.Conn) error {
+	bytes := make([]byte, 6)
+	binary.BigEndian.PutUint16(bytes, 0)
+	binary.BigEndian.PutUint32(bytes[2:], s.playStreamId)
+
+	streamBegin := Chunk{
+		type_:     ChunkType0,
+		csid:      ChunkStreamIdNetwork,
+		Timestamp: 0,
+		tid:       MessageTypeIDUserControlMessage,
+		sid:       0,
+		Length:    6,
+
+		data: bytes,
+		size: len(windowSize),
+	}
+
+	return s.SendChunks(conn, streamBegin)
+}
+
+func (s *Stack) SendStreamEOFChunk(conn net.Conn) error {
+	bytes := make([]byte, 6)
+	binary.BigEndian.PutUint16(bytes, 1)
+	binary.BigEndian.PutUint32(bytes[2:], s.playStreamId)
+
+	streamEof := Chunk{
+		type_:     ChunkType0,
+		csid:      ChunkStreamIdNetwork,
+		Timestamp: 0,
+		tid:       MessageTypeIDUserControlMessage,
+		sid:       0,
+		Length:    6,
+
+		data: bytes,
+		size: 6,
+	}
+
+	return s.SendChunks(conn, streamEof)
 }
