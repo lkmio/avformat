@@ -29,6 +29,10 @@ func (deMuxer *DeMuxerImpl) SetHandler(handler OnDeMuxerHandler) {
 	deMuxer.Handler = handler
 }
 
+func (deMuxer *DeMuxerImpl) Close() {
+	deMuxer.Handler = nil
+}
+
 // OnTransDeMuxerHandler 从传输协议层中(RTMP/RTP...)解析出AVPacket/AVStream, 这个过程是有序的，可以和GOP缓存绑定，减少内存拷贝
 // DeMuxer在解析到音视频数据，需要拷贝时，通过OnPartPacket回调出去，外部拷贝. 解析到完整帧时，依旧使用OnDeMuxStream/OnDeMuxPacket通知
 type OnTransDeMuxerHandler interface {

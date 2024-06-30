@@ -7,7 +7,7 @@ import (
 
 type TCPClient struct {
 	transport
-	tcp net.Conn
+	conn net.Conn
 }
 
 func (t *TCPClient) Bind(addr net.Addr) error {
@@ -22,7 +22,7 @@ func (t *TCPClient) Connect(local, addr *net.TCPAddr) error {
 	if tcp, err := dialer.Dial("tcp", addr.String()); err != nil {
 		return err
 	} else {
-		t.tcp = tcp
+		t.conn = tcp
 		t.ctx, t.cancel = context.WithCancel(context.Background())
 		go recvTcp(t.ctx, tcp, t.handler)
 		return nil
@@ -30,6 +30,15 @@ func (t *TCPClient) Connect(local, addr *net.TCPAddr) error {
 }
 
 func (t *TCPClient) Write(data []byte) error {
-	_, err := t.tcp.Write(data)
+	_, err := t.conn.Write(data)
 	return err
+}
+
+func (t *TCPClient) Close() {
+	if t.conn != nil {
+		t.conn.Close()
+		t.conn = nil
+	}
+
+	t.transport.Close()
 }

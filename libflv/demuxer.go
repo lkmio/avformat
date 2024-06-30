@@ -468,7 +468,3 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 
 	return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("the codec %d is currently not supported in FLV", codeId)
 }
-
-func (d *deMuxer) Close() {
-	d.Handler = nil
-}

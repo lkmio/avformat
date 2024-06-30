@@ -83,5 +83,6 @@ func (impl *transport) SetHandler2(onConnected func(conn net.Conn) []byte, onPac
 }
 
 func (impl *transport) Close() {
+	impl.handler = nil
 	impl.cancel()
 }

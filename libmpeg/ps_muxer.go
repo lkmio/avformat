@@ -157,5 +157,5 @@ func (r *Muxer) InputWithMix(keyFrame bool, videoData, audioData []byte, pts, dt
 }
 
 func (r *Muxer) Close() {
-
+	r.handler = nil
 }

@@ -22,6 +22,8 @@ type Muxer interface {
 
 	// SetParams 传递私有数据
 	SetParams(params interface{})
+
+	Close()
 }
 
 type muxer struct {
@@ -95,6 +97,12 @@ func (m *muxer) Input(data []byte, timestamp uint32) {
 	splitPayloadData(data, m.maxPayloadSize, func(payload []byte, start, end bool) {
 		m.mux(timestamp, end, payload)
 	})
+}
+
+func (m *muxer) Close() {
+	m.params = nil
+	m.allocHandler = nil
+	m.writeHandler = nil
 }
 
 func (m *muxer) init(payload int, seq int, ssrc uint32) {

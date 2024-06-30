@@ -61,6 +61,13 @@ func (u *UDPServer) Send(data []byte, addr net.Addr) (int, error) {
 	return u.udp[0].WriteTo(data, addr)
 }
 
+func (u *UDPServer) Close() {
+	if len(u.udp) > 0 {
+		u.udp[0].Close()
+	}
+	u.transport.Close()
+}
+
 func recvUdp(ctx context.Context, conn net.PacketConn, handler Handler) {
 	bytes := make([]byte, 1500)
 	//音视频UDP收流都使用jitter buffer处理, 难免还是会拷贝一次, 所以UDP不使用外部的读取缓冲区.

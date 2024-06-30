@@ -32,7 +32,8 @@ type PSDeMuxer struct {
 
 func (d *PSDeMuxer) Close() {
 	//回调最后一帧
-
+	d.handler = nil
+	d.params = nil
 }
 
 func (d *PSDeMuxer) SetHandler(handler esHandler) {

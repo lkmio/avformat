@@ -111,3 +111,8 @@ func (source *PSDeMuxerContext) onEsPacket(data []byte, total int, first bool, m
 
 	return nil
 }
+
+func (source *PSDeMuxerContext) Close() {
+	source.handler = nil
+	source.probeBuffer.deMuxer.Close()
+}

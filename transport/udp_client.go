@@ -40,6 +40,9 @@ func (u *UDPClient) WriteTo(data []byte, addr *net.UDPAddr) error {
 }
 
 func (u *UDPClient) Close() {
+	if u.udp != nil {
+		u.udp.Close()
+		u.udp = nil
+	}
 	u.transport.Close()
-	u.udp.Close()
 }

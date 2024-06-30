@@ -10,6 +10,7 @@ import (
 
 type TCPServer struct {
 	transport
+	listener net.Listener
 }
 
 func (t *TCPServer) Bind(addr net.Addr) error {
@@ -30,6 +31,7 @@ func (t *TCPServer) Bind(addr net.Addr) error {
 	if listen, err := config.Listen(t.ctx, "tcp", addr.String()); err != nil {
 		return err
 	} else {
+		t.listener = listen
 		time.Sleep(100 * time.Millisecond)
 		go t.accept(listen.(*net.TCPListener))
 		return nil
@@ -46,6 +48,15 @@ func (t *TCPServer) accept(listener *net.TCPListener) {
 
 		go recvTcp(t.ctx, tcp, t.handler)
 	}
+}
+
+func (t *TCPServer) Close() {
+	if t.listener != nil {
+		t.listener.Close()
+		t.listener = nil
+	}
+
+	t.transport.Close()
 }
 
 func recvTcp(ctx context.Context, conn net.Conn, handler Handler) {

@@ -534,6 +534,7 @@ func (s *Stack) sendStatus(conn net.Conn, transactionId float64, level, code, de
 func (s *Stack) Close() {
 	s.handler = nil
 	s.publisherHandler = nil
+	s.parser.partPacketCB = nil
 }
 
 func (s *Stack) MetaData() map[string]interface{} {
