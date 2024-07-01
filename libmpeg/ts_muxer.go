@@ -133,8 +133,6 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 		size += len(bytes)
 	}
 
-	//不固定PES包长
-	track.pes.packetLength = 0x0000
 	track.pes.ptsDtsFlags = PesExistPtsMark
 	track.pes.dts = dts
 	track.pes.pts = pts
@@ -147,9 +145,9 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 		bytes := t.allocHandler(TsPacketSize)
 		pktSize := TsPacketSize - 4
 
-		//首包加入pcr和aud
+		//首包加入pcr
 		if remain == pesLen {
-			if utils.AVMediaTypeVideo == track.mediaType {
+			if utils.AVMediaTypeVideo == track.mediaType && t.startTS == pts {
 				pktSize -= track.tsHeader.writePCR(bytes[4:], pts*300)
 			}
 			track.tsHeader.payloadUnitStartIndicator = 1
@@ -166,6 +164,8 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 		//拷贝pes头
 		if pesHeaderLen > 0 {
 			utils.Assert(pktSize > pesHeaderLen)
+			packetLength := pesLen - 6
+			pesStartIndex := TsPacketSize - pktSize + 4
 
 			copy(bytes[TsPacketSize-pktSize:], track.buffer[:pesHeaderLen])
 
@@ -178,7 +178,17 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 			//传入的nalu不要携带aud
 			if utils.AVMediaTypeVideo == track.mediaType {
 				utils.Assert(pktSize > 6)
-				pktSize -= writeAud(bytes[TsPacketSize-pktSize:], track.codecId)
+				audLength := writeAud(bytes[TsPacketSize-pktSize:], track.codecId)
+				packetLength += audLength
+				pktSize -= audLength
+			}
+
+			if packetLength <= 65535 {
+				bytes[pesStartIndex] = byte(packetLength >> 8 & 0xFF)
+				bytes[pesStartIndex+1] = byte(packetLength & 0xFF)
+			} else {
+				bytes[pesStartIndex] = 0x00
+				bytes[pesStartIndex+1] = 0x00
 			}
 		}
 
