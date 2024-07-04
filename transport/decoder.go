@@ -44,6 +44,10 @@ func (d *FixedLengthFrameDecoder) Input(data []byte) error {
 	return nil
 }
 
+func (d *FixedLengthFrameDecoder) Close() {
+	d.cb = nil
+}
+
 // LengthFieldFrameDecoder 帧长解码器
 type LengthFieldFrameDecoder struct {
 	data []byte //本次输入的数据长度小于帧长时, 作为缓存区
@@ -121,6 +125,10 @@ func (d *LengthFieldFrameDecoder) Input(data []byte) error {
 	}
 
 	return nil
+}
+
+func (d *LengthFieldFrameDecoder) Close() {
+	d.cb = nil
 }
 
 // DelimiterFrameDecoder 分隔符解码器
@@ -205,4 +213,8 @@ func (d *DelimiterFrameDecoder) Input(data []byte) error {
 	}
 
 	return nil
+}
+
+func (d *DelimiterFrameDecoder) Close() {
+	d.cb = nil
 }
