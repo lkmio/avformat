@@ -250,7 +250,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			s.audioTimestamp += chunk.Timestamp
 		}
 
-		if s.publisherHandler == nil {
+		if s.parser.partPacketCB == nil {
 			s.publisherHandler.OnAudio(s.audioStreamIndex, chunk.data[:chunk.Length], s.audioTimestamp)
 		} else {
 			s.publisherHandler.OnAudio(s.audioStreamIndex, nil, s.audioTimestamp)
@@ -264,7 +264,7 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			s.videoTimestamp += chunk.Timestamp
 		}
 
-		if s.publisherHandler == nil {
+		if s.parser.partPacketCB == nil {
 			s.publisherHandler.OnVideo(s.videoStreamIndex, chunk.data[:chunk.Length], s.videoTimestamp)
 		} else {
 			s.publisherHandler.OnVideo(s.videoStreamIndex, nil, s.videoTimestamp)
