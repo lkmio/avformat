@@ -2,17 +2,20 @@ package transport
 
 import (
 	"net"
+	"runtime"
 	"testing"
 )
 
 type UDPHandler struct {
 }
 
-func (U *UDPHandler) OnConnected(conn net.Conn) {
+func (U *UDPHandler) OnConnected(conn net.Conn) []byte {
+	return nil
 }
 
-func (U *UDPHandler) OnPacket(conn net.Conn, data []byte) {
+func (U *UDPHandler) OnPacket(conn net.Conn, data []byte) []byte {
 	conn.Write(data)
+	return nil
 }
 
 func (U *UDPHandler) OnDisConnected(conn net.Conn, err error) {
@@ -20,16 +23,21 @@ func (U *UDPHandler) OnDisConnected(conn net.Conn, err error) {
 }
 
 func TestUDPServer(t *testing.T) {
-	transport := UDPServer{}
-	handler := &UDPHandler{}
-	transport.SetHandler(handler)
+	udpServer := UDPServer{
+		ReuseServer: ReuseServer{
+			EnableReuse:      true,
+			ConcurrentNumber: runtime.NumCPU(),
+		},
+	}
 
+	udpServer.SetHandler(&UDPHandler{})
 	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:20000")
-	if err := transport.Bind(addr); err != nil {
+	if err := udpServer.Bind(addr); err != nil {
 		panic(err)
 	}
 
 	println("启动UDPServer成功 addr:" + addr.String())
+	udpServer.Receive()
 
 	select {}
 }

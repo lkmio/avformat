@@ -2,8 +2,11 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"net"
+	"runtime"
+	"syscall"
 )
 
 const (
@@ -60,29 +63,81 @@ type ITransport interface {
 	SetHandler2(onConnected func(conn net.Conn) []byte,
 		onPacket func(conn net.Conn, data []byte) []byte,
 		onDisConnected func(conn net.Conn, err error))
+
+	ListenIP() string
+
+	ListenPort() int
 }
 
 type transport struct {
 	handler Handler
+	ctx     context.Context
+	cancel  context.CancelFunc
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	listenIP   string
+	listenPort int
 }
 
-func (impl *transport) SetHandler(handler Handler) {
-	impl.handler = handler
+func (t *transport) setListenAddr(addr net.Addr) {
+	if tcpAddr, ok := addr.(*net.TCPAddr); ok {
+		t.listenIP = tcpAddr.IP.String()
+		t.listenPort = tcpAddr.Port
+	} else if udpAddr, ok := addr.(*net.UDPAddr); ok {
+		t.listenIP = udpAddr.IP.String()
+		t.listenPort = udpAddr.Port
+	} else {
+		panic(addr)
+	}
 }
 
-func (impl *transport) SetHandler2(onConnected func(conn net.Conn) []byte, onPacket func(conn net.Conn, data []byte) []byte, onDisConnected func(conn net.Conn, err error)) {
-	utils.Assert(impl.handler == nil)
-	impl.SetHandler(&handler{
+func (t *transport) SetHandler(handler Handler) {
+	t.handler = handler
+}
+
+func (t *transport) SetHandler2(onConnected func(conn net.Conn) []byte, onPacket func(conn net.Conn, data []byte) []byte, onDisConnected func(conn net.Conn, err error)) {
+	utils.Assert(t.handler == nil)
+	t.SetHandler(&handler{
 		onConnected,
 		onPacket,
 		onDisConnected,
 	})
 }
 
-func (impl *transport) Close() {
-	impl.handler = nil
-	impl.cancel()
+func (t *transport) Close() {
+	t.handler = nil
+	if t.cancel != nil {
+		t.cancel()
+		t.cancel = nil
+	}
+}
+
+func (t *transport) ListenPort() int {
+	return t.listenPort
+}
+
+func (t *transport) ListenIP() string {
+	return t.listenIP
+}
+
+type ReuseServer struct {
+	transport
+	ConcurrentNumber int
+	EnableReuse      bool
+}
+
+func (r *ReuseServer) GetSetOptFunc() func(network, address string, c syscall.RawConn) error {
+	if r.ComputeConcurrentNumber() > 1 {
+		return SetReuseOpt
+	}
+
+	return nil
+}
+
+func (r *ReuseServer) ComputeConcurrentNumber() int {
+	if runtime.GOOS == "darwin" || !r.EnableReuse {
+		r.ConcurrentNumber = 1
+	}
+
+	r.ConcurrentNumber = libbufio.MaxInt(r.ConcurrentNumber, 1)
+	return r.ConcurrentNumber
 }

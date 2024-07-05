@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 )
 
@@ -19,14 +20,23 @@ func (t *TCPClient) Connect(local, addr *net.TCPAddr) error {
 		LocalAddr: local,
 	}
 
-	if tcp, err := dialer.Dial("tcp", addr.String()); err != nil {
+	tcp, err := dialer.Dial("tcp", addr.String())
+	if err != nil {
+		t.Close()
 		return err
-	} else {
-		t.conn = tcp
-		t.ctx, t.cancel = context.WithCancel(context.Background())
-		go recvTcp(t.ctx, tcp, t.handler)
-		return nil
 	}
+
+	t.conn = tcp
+	t.ctx, t.cancel = context.WithCancel(context.Background())
+	t.setListenAddr(tcp.LocalAddr())
+	return nil
+}
+
+func (t *TCPClient) Receive() {
+	utils.Assert(t.handler != nil)
+	utils.Assert(t.conn != nil)
+
+	recvTcp(t.ctx, t.conn, t.handler)
 }
 
 func (t *TCPClient) Write(data []byte) error {

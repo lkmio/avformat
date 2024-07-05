@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"github.com/yangjiechina/avformat/utils"
 	"net"
 )
 
@@ -17,16 +18,19 @@ func (u *UDPClient) Bind(addr net.Addr) error {
 func (u *UDPClient) Connect(local, remote *net.UDPAddr) error {
 	udp, err := net.DialUDP("udp", local, remote)
 	if err != nil {
+		u.Close()
 		return err
 	}
 
 	u.udp = udp
+	u.setListenAddr(udp.LocalAddr())
 	return nil
 }
 
-func (u *UDPClient) Recv() {
+func (u *UDPClient) Receive() {
+	utils.Assert(u.handler != nil)
 	u.ctx, u.cancel = context.WithCancel(context.Background())
-	go recvUdp(u.ctx, u.udp, u.handler)
+	recvUdp(u.ctx, u.udp, u.handler)
 }
 
 func (u *UDPClient) Write(data []byte) error {

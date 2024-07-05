@@ -4,41 +4,46 @@ import (
 	"context"
 	"github.com/yangjiechina/avformat/utils"
 	"net"
-	"syscall"
-	"time"
 )
 
 type TCPServer struct {
-	transport
-	listener net.Listener
+	ReuseServer
+	listeners []*net.TCPListener
 }
 
 func (t *TCPServer) Bind(addr net.Addr) error {
-	utils.Assert(t.handler != nil)
+	utils.Assert(t.listeners == nil)
 
 	config := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			return c.Control(func(fd uintptr) {
-				//syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR, 1)
-				//syscall.SO_REUSEADDR
-				syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-			})
-		},
+		Control: t.GetSetOptFunc(),
 	}
 
 	t.ctx, t.cancel = context.WithCancel(context.Background())
+	for i := 0; i < t.ComputeConcurrentNumber(); i++ {
 
-	if listen, err := config.Listen(t.ctx, "tcp", addr.String()); err != nil {
-		return err
-	} else {
-		t.listener = listen
-		time.Sleep(100 * time.Millisecond)
-		go t.accept(listen.(*net.TCPListener))
-		return nil
+		listen, err := config.Listen(t.ctx, "tcp", addr.String())
+		if err != nil {
+			t.Close()
+			return err
+		}
+
+		t.listeners = append(t.listeners, listen.(*net.TCPListener))
+		t.setListenAddr(addr)
+	}
+
+	return nil
+}
+
+func (t *TCPServer) Accept() {
+	utils.Assert(t.handler != nil)
+	utils.Assert(len(t.listeners) > 0)
+
+	for _, listener := range t.listeners {
+		go t.doAccept(listener)
 	}
 }
 
-func (t *TCPServer) accept(listener *net.TCPListener) {
+func (t *TCPServer) doAccept(listener *net.TCPListener) {
 	for t.ctx.Err() == nil {
 		tcp, err := listener.AcceptTCP()
 		if err != nil {
@@ -51,11 +56,11 @@ func (t *TCPServer) accept(listener *net.TCPListener) {
 }
 
 func (t *TCPServer) Close() {
-	if t.listener != nil {
-		t.listener.Close()
-		t.listener = nil
+	for _, listener := range t.listeners {
+		listener.Close()
 	}
 
+	t.listeners = nil
 	t.transport.Close()
 }
 

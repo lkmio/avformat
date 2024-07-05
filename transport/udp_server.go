@@ -2,69 +2,49 @@ package transport
 
 import (
 	"context"
-	"github.com/yangjiechina/avformat/libbufio"
 	"github.com/yangjiechina/avformat/utils"
 	"net"
-	"runtime"
-	"syscall"
 )
 
 type UDPServer struct {
-	transport
-	udp             []net.PacketConn
-	concurrentCount int
-}
-
-func reusePortControl(network, address string, c syscall.RawConn) error {
-	return c.Control(func(fd uintptr) {
-		if runtime.GOOS != "darwin" {
-			syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, 0x4, 1)
-		}
-	})
-}
-
-func NewUDPServer(addr net.Addr, handler Handler) (*UDPServer, error) {
-	count := runtime.NumCPU()
-	if runtime.GOOS == "darwin" {
-		count = 1
-	}
-
-	server := &UDPServer{concurrentCount: count}
-	server.SetHandler(handler)
-	return server, server.Bind(addr)
+	ReuseServer
+	udp []net.PacketConn
 }
 
 func (u *UDPServer) Bind(addr net.Addr) error {
-	utils.Assert(u.handler != nil)
-
 	u.ctx, u.cancel = context.WithCancel(context.Background())
-	u.concurrentCount = libbufio.MaxInt(u.concurrentCount, 1)
-
-	for i := 0; i < u.concurrentCount; i++ {
+	for i := 0; i < u.ReuseServer.ComputeConcurrentNumber(); i++ {
 		lc := net.ListenConfig{
-			Control: reusePortControl,
+			Control: u.ReuseServer.GetSetOptFunc(),
 		}
 
 		socket, err := lc.ListenPacket(u.ctx, "udp", addr.String())
 		if err != nil {
+			u.Close()
 			return err
 		}
 
 		u.udp = append(u.udp, socket)
-		go recvUdp(u.ctx, socket, u.handler)
 	}
 
+	u.setListenAddr(addr)
 	return nil
 }
 
-func (u *UDPServer) Send(data []byte, addr net.Addr) (int, error) {
-	return u.udp[0].WriteTo(data, addr)
+func (u *UDPServer) Receive() {
+	utils.Assert(u.handler != nil)
+	utils.Assert(len(u.udp) > 0)
+
+	for _, conn := range u.udp {
+		go recvUdp(u.ctx, conn, u.handler)
+	}
 }
 
 func (u *UDPServer) Close() {
-	if len(u.udp) > 0 {
-		u.udp[0].Close()
+	for _, conn := range u.udp {
+		conn.Close()
 	}
+
 	u.transport.Close()
 }
 
@@ -86,6 +66,4 @@ func recvUdp(ctx context.Context, conn net.PacketConn, handler Handler) {
 			handler.OnPacket(c, bytes[:n])
 		}
 	}
-
-	_ = conn.Close()
 }

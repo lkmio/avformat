@@ -16,11 +16,13 @@ func TestUDPClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client.SetHandler2(nil, func(conn net.Conn, data []byte) {
+	client.SetHandler2(nil, func(conn net.Conn, data []byte) []byte {
 		println("recv data:" + string(data))
+		return nil
 	}, nil)
 
-	client.Recv()
+	go client.Receive()
+
 	for {
 		msg := "hello!"
 		err := client.Write([]byte(msg))

@@ -10,14 +10,14 @@ import (
 type TCPClientHandler struct {
 }
 
-func (T *TCPClientHandler) OnConnected(conn net.Conn) {
+func (T *TCPClientHandler) OnConnected(conn net.Conn) []byte {
 	println("Client:" + conn.LocalAddr().String() + " 链接成功")
 	conn.Write([]byte("hello world!"))
-
+	return nil
 }
 
-func (T *TCPClientHandler) OnPacket(conn net.Conn, data []byte) {
-
+func (T *TCPClientHandler) OnPacket(conn net.Conn, data []byte) []byte {
+	return nil
 }
 
 func (T *TCPClientHandler) OnDisConnected(conn net.Conn, err error) {
@@ -41,16 +41,20 @@ func TestTCPClient(t *testing.T) {
 	select {}
 
 	var clients []*TCPClient
-	handler := &TCPClientHandler{}
+
+	handler_ := &TCPClientHandler{}
+
 	for i := 0; i < 100; i++ {
 		client := &TCPClient{}
 		go func() {
 			serverAddr, _ := net.ResolveTCPAddr("tcp", "192.168.2.145:8000")
-			client.SetHandler(handler)
+			client.SetHandler(handler_)
 
 			if err := client.Connect(nil, serverAddr); err != nil {
 				panic(err)
 			}
+
+			client.Receive()
 		}()
 
 		clients = append(clients, client)
