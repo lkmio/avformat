@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libbufio"
+	"github.com/lkmio/avformat/libavc"
+	"github.com/lkmio/avformat/libbufio"
 )
 
 type HEVCSPSInfo struct {

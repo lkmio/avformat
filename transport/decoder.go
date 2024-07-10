@@ -2,8 +2,8 @@ package transport
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libbufio"
+	"github.com/lkmio/avformat/utils"
 )
 
 // FixedLengthFrameDecoder 固定长度解码器

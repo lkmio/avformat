@@ -1,7 +1,7 @@
 package librtp
 
 import (
-	"github.com/yangjiechina/avformat/libbufio"
+	"github.com/lkmio/avformat/libbufio"
 )
 
 type allocHandler func(params interface{}) []byte

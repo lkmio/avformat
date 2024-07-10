@@ -1,6 +1,6 @@
 package libmp4
 
-import "github.com/yangjiechina/avformat/utils"
+import "github.com/lkmio/avformat/utils"
 
 // ffmpeg用的小端字序
 func mkTag(byte1, byte2, byte3, byte4 byte) uint32 {

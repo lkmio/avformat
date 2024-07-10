@@ -2,8 +2,8 @@ package librtp
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/libmpeg"
+	"github.com/lkmio/avformat/libbufio"
+	"github.com/lkmio/avformat/libmpeg"
 	"net"
 	"testing"
 )

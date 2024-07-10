@@ -2,7 +2,7 @@ package librtsp
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/utils"
 )
 
 var (

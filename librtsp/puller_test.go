@@ -1,7 +1,7 @@
 package librtsp
 
 import (
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/utils"
 	"os"
 	"testing"
 )

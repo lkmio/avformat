@@ -3,8 +3,8 @@ package libflv
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libbufio"
+	"github.com/lkmio/avformat/utils"
 	"time"
 )
 

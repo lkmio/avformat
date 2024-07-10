@@ -2,9 +2,9 @@ package libmpeg
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libavc"
+	"github.com/lkmio/avformat/libbufio"
+	"github.com/lkmio/avformat/utils"
 )
 
 type esHandler func(data []byte, total int, first bool, mediaType utils.AVMediaType, id utils.AVCodecID,

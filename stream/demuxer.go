@@ -1,6 +1,6 @@
 package stream
 
-import "github.com/yangjiechina/avformat/utils"
+import "github.com/lkmio/avformat/utils"
 
 // OnDeMuxerHandler 解复用器回调
 type OnDeMuxerHandler interface {

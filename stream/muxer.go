@@ -1,6 +1,6 @@
 package stream
 
-import "github.com/yangjiechina/avformat/utils"
+import "github.com/lkmio/avformat/utils"
 
 // Muxer 复用器
 type Muxer interface {

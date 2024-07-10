@@ -1,7 +1,7 @@
 package librtp
 
 import (
-	"github.com/yangjiechina/avformat/transport"
+	"github.com/lkmio/avformat/transport"
 	"net"
 )
 

@@ -4,7 +4,7 @@ package libflv
 //@https://rtmp.veriskope.com/pdf/amf0-file-format-specification.pdf
 
 import (
-	"github.com/yangjiechina/avformat/libbufio"
+	"github.com/lkmio/avformat/libbufio"
 	"math"
 )
 

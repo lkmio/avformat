@@ -3,7 +3,7 @@ package libflv
 import (
 	"bufio"
 	"fmt"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/utils"
 	"os"
 	"testing"
 )

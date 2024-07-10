@@ -3,9 +3,9 @@ package librtmp
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangjiechina/avformat/libbufio"
-	"github.com/yangjiechina/avformat/libflv"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libbufio"
+	"github.com/lkmio/avformat/libflv"
+	"github.com/lkmio/avformat/utils"
 	"math/rand"
 	"net"
 	url2 "net/url"

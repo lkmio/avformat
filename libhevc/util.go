@@ -2,7 +2,7 @@ package libhevc
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
+	"github.com/lkmio/avformat/libavc"
 )
 
 var (

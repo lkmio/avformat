@@ -2,7 +2,7 @@ package libmpeg
 
 import (
 	"bufio"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/utils"
 	"os"
 	"testing"
 )

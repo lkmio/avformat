@@ -3,7 +3,7 @@ package libavc
 import (
 	"bytes"
 	"fmt"
-	"github.com/yangjiechina/avformat/libbufio"
+	"github.com/lkmio/avformat/libbufio"
 	"math"
 )
 

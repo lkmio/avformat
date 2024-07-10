@@ -2,7 +2,7 @@ package libmp4
 
 import (
 	"encoding/binary"
-	"github.com/yangjiechina/avformat/libbufio"
+	"github.com/lkmio/avformat/libbufio"
 )
 
 type reader struct {

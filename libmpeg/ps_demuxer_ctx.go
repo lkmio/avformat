@@ -1,9 +1,9 @@
 package libmpeg
 
 import (
-	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libhevc"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libavc"
+	"github.com/lkmio/avformat/libhevc"
+	"github.com/lkmio/avformat/utils"
 )
 
 // PSDeMuxerContext 处理PSDeMuxer解析的部分es包，回调通知解析成完整包

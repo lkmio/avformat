@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libhevc"
+	"github.com/lkmio/avformat/libavc"
+	"github.com/lkmio/avformat/libhevc"
 )
 
 type PacketType byte

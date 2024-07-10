@@ -1,6 +1,6 @@
 package libmp4
 
-import "github.com/yangjiechina/avformat/utils"
+import "github.com/lkmio/avformat/utils"
 
 type MetaData interface {
 	MediaType() utils.AVMediaType

@@ -2,9 +2,9 @@ package libmp4
 
 import (
 	"fmt"
-	"github.com/yangjiechina/avformat/libavc"
-	"github.com/yangjiechina/avformat/libhevc"
-	"github.com/yangjiechina/avformat/utils"
+	"github.com/lkmio/avformat/libavc"
+	"github.com/lkmio/avformat/libhevc"
+	"github.com/lkmio/avformat/utils"
 )
 
 //stsd * 8.5.2 sample descriptions (codec types, initialization
