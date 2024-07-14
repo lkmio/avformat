@@ -16,6 +16,7 @@ type Conn struct {
 
 	Data    interface{}                    //绑定参数
 	closeCb func(conn net.Conn, err error) //主动调用Close时回调
+	active  bool
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
@@ -60,7 +61,13 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	}
 }
 
+func (c *Conn) IsActive() bool {
+	return c.active
+}
+
 func (c *Conn) Close() error {
+	c.active = false
+
 	err := c.conn.Close()
 
 	if c.closeCb != nil {
@@ -98,5 +105,5 @@ func (c *Conn) ReallocateRecvBuffer(size int) {
 }
 
 func NewConn(conn net.Conn) *Conn {
-	return &Conn{conn: conn}
+	return &Conn{conn: conn, active: true}
 }
