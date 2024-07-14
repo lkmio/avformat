@@ -69,17 +69,15 @@ func FindStartCode2(p []byte) int {
 func IsKeyFrame(p []byte) bool {
 	index := 0
 	for {
-		index = FindStartCode(p[index:])
-		if index < 0 {
+		n := FindStartCode(p[index:])
+		if n < 0 {
 			return false
 		}
+
+		index += n
 		state := p[index]
 		switch state & 0x1F {
-		case H264NalSPS:
-			break
-		case H264NalPPS:
-			break
-		case H264NalSEI:
+		case H264NalSEI, H264NalAUD, H264NalPPS, H264NalSPS:
 			break
 		case H264NalIDRSlice:
 			return true

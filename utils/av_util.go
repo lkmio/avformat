@@ -1,5 +1,7 @@
 package utils
 
+import "fmt"
+
 type AVMediaType int
 
 const (
@@ -11,3 +13,35 @@ const (
 	AVMediaTypeAttachment = AVMediaType(4) ///< Opaque data information usually sparse
 	AVMediaTypeN          = AVMediaType(5)
 )
+
+func (a AVMediaType) ToString() string {
+	if AVMediaTypeUnknown == a {
+		return "unknown"
+	}
+
+	if AVMediaTypeVideo == a {
+		return "video"
+	}
+
+	if AVMediaTypeAudio == a {
+		return "audio"
+	}
+
+	if AVMediaTypeData == a {
+		return "data"
+	}
+
+	if AVMediaTypeSubtitle == a {
+		return "subtitle"
+	}
+
+	if AVMediaTypeAttachment == a {
+		return "attachment"
+	}
+
+	if AVMediaTypeN == a {
+		return "n"
+	}
+
+	panic(fmt.Sprintf("bad type:%d", a))
+}

@@ -32,15 +32,6 @@ type Handler interface {
 	OnCompletePacket(streamIndex int, mediaType utils.AVMediaType, codec utils.AVCodecID, dts int64, pts int64, key bool) error
 }
 
-func NewPSDeMuxerContext(probeBuffer []byte) *PSDeMuxerContext {
-	context := &PSDeMuxerContext{}
-
-	muxer := NewPSDeMuxer()
-	muxer.SetHandler(context.onEsPacket)
-	context.probeBuffer = NewProbeBuffer(muxer, probeBuffer)
-	return context
-}
-
 func (source *PSDeMuxerContext) Input(data []byte) error {
 	return source.probeBuffer.Input(data)
 }
@@ -103,9 +94,9 @@ func (source *PSDeMuxerContext) onEsPacket(data []byte, total int, first bool, m
 	//判断是否是关键帧, 不用等结束时循环判断.
 	if first && utils.AVMediaTypeVideo == mediaType && !source.idrFrame {
 		if utils.AVCodecIdH264 == id {
-			source.idrFrame = libavc.H264NalIDRSlice == libavc.RemoveStartCode(data)[0]&0x1F
+			source.idrFrame = libavc.IsKeyFrame(data)
 		} else if utils.AVCodecIdH265 == id {
-			source.idrFrame = byte(libhevc.HevcNalIdrWRADL) == libavc.RemoveStartCode(data)[0]>>1&0x3F
+			source.idrFrame = libhevc.IsKeyFrame(data)
 		}
 	}
 
@@ -115,4 +106,13 @@ func (source *PSDeMuxerContext) onEsPacket(data []byte, total int, first bool, m
 func (source *PSDeMuxerContext) Close() {
 	source.handler = nil
 	source.probeBuffer.deMuxer.Close()
+}
+
+func NewPSDeMuxerContext(probeBuffer []byte) *PSDeMuxerContext {
+	context := &PSDeMuxerContext{}
+
+	muxer := NewPSDeMuxer()
+	muxer.SetHandler(context.onEsPacket)
+	context.probeBuffer = NewProbeBuffer(muxer, probeBuffer)
+	return context
 }

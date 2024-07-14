@@ -69,6 +69,7 @@ const (
 	HevcNalUNSPEC62     = HEVCNALUnitType(62)
 	HevcNalUNSPEC63     = HEVCNALUnitType(63)
 )
+
 const (
 	HevcSliceB = HEVCSliceType(0)
 	HevcSliceP = HEVCSliceType(1)

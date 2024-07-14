@@ -112,3 +112,30 @@ func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, []byte, error) {
 	}
 	return vps, sps, pps, nil
 }
+
+func IsKeyFrame(p []byte) bool {
+	index := 0
+	for {
+		n := libavc.FindStartCode(p[index:])
+		if n < 0 {
+			return false
+		}
+
+		index += n
+		type_ := HEVCNALUnitType(p[index] >> 1 & 0x3F)
+		if type_ >= 16 && type_ <= 23 {
+			return true
+		}
+
+		//if type_ >= 19 && type_ <= 20 {
+		//	return true
+		//}
+
+		switch type_ {
+		case HevcNalSPS, HevcNalPPS, HevcNalVPS, HevcNalSeiPPrefix, HevcNalSeiSuffix, HevcNalAUD:
+			break
+		default:
+			return false
+		}
+	}
+}
