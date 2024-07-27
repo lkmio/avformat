@@ -108,11 +108,10 @@ type Chunk struct {
 	type_ ChunkType     //fmt 1-3bytes.低6位等于0,2字节;低6位等于1,3字节
 	csid  ChunkStreamID //chunk stream id. customized by users
 
-	Timestamp uint32
-	//表明的chunk长度
-	Length int           //message length
-	tid    MessageTypeID //message type id
-	sid    uint32        //message stream id. customized by users. LittleEndian
+	Timestamp uint32        //type0-绝对时间戳/type1和type2-与上一个chunk的差值
+	Length    int           //message length
+	tid       MessageTypeID //message type id
+	sid       uint32        //message stream id. customized by users. LittleEndian
 
 	//body
 	data []byte
@@ -159,7 +158,7 @@ func (h *Chunk) ToBytes(dst []byte) int {
 		if h.Timestamp >= 0xFFFFFF {
 			libbufio.WriteUInt24(dst[index:], 0xFFFFFF)
 		} else {
-			libbufio.WriteUInt24(dst[index:], uint32(h.Timestamp))
+			libbufio.WriteUInt24(dst[index:], h.Timestamp)
 		}
 		index += 3
 	}
@@ -171,12 +170,12 @@ func (h *Chunk) ToBytes(dst []byte) int {
 	}
 
 	if h.type_ < ChunkType1 {
-		binary.LittleEndian.PutUint32(dst[index:], uint32(h.sid))
+		binary.LittleEndian.PutUint32(dst[index:], h.sid)
 		index += 4
 	}
 
 	if h.Timestamp >= 0xFFFFFF {
-		binary.BigEndian.PutUint32(dst[index:], uint32(h.Timestamp))
+		binary.BigEndian.PutUint32(dst[index:], h.Timestamp)
 		index += 4
 	}
 
@@ -205,14 +204,15 @@ func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
 }
 
 func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
+	utils.Assert(chunkSize-offset > 0)
 	length := len(data)
-	first := true
 	var n int
+
 	for length > 0 {
 		var min int
-		if first {
+		if offset > 0 {
 			min = libbufio.MinInt(length, chunkSize-offset)
-			first = false
+			offset = 0
 		} else {
 			min = libbufio.MinInt(length, chunkSize)
 		}
@@ -227,6 +227,11 @@ func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
 		if length > 0 {
 			dst[n] = (0x3 << 6) | byte(h.csid)
 			n++
+
+			if h.Timestamp >= 0xFFFFFF {
+				binary.BigEndian.PutUint32(dst[n:], h.Timestamp)
+				n += 4
+			}
 		}
 	}
 
