@@ -8,7 +8,6 @@ import (
 type Parser struct {
 	state ParserState
 
-	csidSize     int
 	headerOffset int
 	extended     bool
 
@@ -20,10 +19,6 @@ type Parser struct {
 	partPacketCB    func(chunk *Chunk, data []byte)
 	localChunkSize  int //(我方)发送消息的chunk大小 默认128
 	remoteChunkSize int //(对方)解析消息的chunk大小 默认128
-}
-
-func NewParser() *Parser {
-	return &Parser{localChunkSize: DefaultChunkSize, remoteChunkSize: DefaultChunkSize}
 }
 
 func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
@@ -39,11 +34,11 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 			p.currentChunk.csid = 0
 			if data[i]&0x3F == 0 {
-				p.csidSize = 1
+				p.headerOffset = 1
 			} else if data[i]&0x3F == 1 {
-				p.csidSize = 2
+				p.headerOffset = 2
 			} else {
-				p.csidSize = 0
+				p.headerOffset = 0
 				p.currentChunk.csid = ChunkStreamID(data[i] & 0x3F)
 			}
 
@@ -53,16 +48,17 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			break
 
 		case ParserStateBasicHeader:
-			for ; p.csidSize > 0 && i < length; i++ {
+			for ; p.headerOffset > 0 && i < length; i++ {
 				p.currentChunk.csid <<= 8
 				p.currentChunk.csid |= ChunkStreamID(data[i])
-				p.csidSize--
+				p.headerOffset--
 			}
 
-			if p.csidSize == 0 {
+			if p.headerOffset == 0 {
 				if p.currentChunk.type_ < ChunkType3 {
 					p.state = ParserStateTimestamp
-					p.headerOffset = 0
+				} else if p.extended {
+					p.state = ParserStateExtendedTimestamp
 				} else {
 					p.state = ParserStatePayload
 				}
@@ -77,6 +73,8 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			}
 
 			if p.headerOffset == 3 {
+				p.headerOffset = 0
+
 				p.currentChunk.Timestamp &= 0xFFFFFF
 				p.extended = p.currentChunk.Timestamp == 0xFFFFFF
 				if p.currentChunk.type_ < ChunkType2 {
@@ -90,13 +88,15 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			break
 
 		case ParserStateMessageLength:
-			for ; p.headerOffset < 6 && i < length; i++ {
+			for ; p.headerOffset < 3 && i < length; i++ {
 				p.currentChunk.Length <<= 8
 				p.currentChunk.Length |= int(data[i])
 				p.headerOffset++
 			}
 
-			if p.headerOffset == 6 {
+			if p.headerOffset == 3 {
+				p.headerOffset = 0
+
 				//24位有效
 				p.currentChunk.Length &= 0x00FFFFFF
 				p.state = ParserStateStreamType
@@ -106,7 +106,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 		case ParserStateStreamType:
 			p.currentChunk.tid = MessageTypeID(data[i])
 			i++
-			p.headerOffset++
+
 			if p.currentChunk.type_ == ChunkType0 {
 				p.state = ParserStateStreamId
 			} else if p.extended {
@@ -117,13 +117,15 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			break
 
 		case ParserStateStreamId:
-			for ; p.headerOffset < 11 && i < length; i++ {
+			for ; p.headerOffset < 4 && i < length; i++ {
 				p.currentChunk.sid <<= 8
 				p.currentChunk.sid |= uint32(data[i])
 				p.headerOffset++
 			}
 
-			if p.headerOffset == 11 {
+			if p.headerOffset == 4 {
+				p.headerOffset = 0
+
 				if p.extended {
 					p.state = ParserStateExtendedTimestamp
 				} else {
@@ -133,13 +135,15 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 			break
 
 		case ParserStateExtendedTimestamp:
-			for ; p.headerOffset < 15 && i < length; i++ {
+			for ; p.headerOffset < 4 && i < length; i++ {
 				p.currentChunk.Timestamp <<= 8
 				p.currentChunk.Timestamp |= uint32(data[i])
 				p.headerOffset++
 			}
 
-			if p.headerOffset == 15 {
+			if p.headerOffset == 4 {
+				p.headerOffset = 0
+
 				p.state = ParserStatePayload
 			}
 			break
@@ -244,7 +248,10 @@ func (p *Parser) Reset() {
 	p.currentChunk.tid = 0
 
 	p.state = ParserStateInit
-	p.csidSize = 0
 	p.headerOffset = 0
 	p.extended = false
+}
+
+func NewParser() *Parser {
+	return &Parser{localChunkSize: DefaultChunkSize, remoteChunkSize: DefaultChunkSize}
 }
