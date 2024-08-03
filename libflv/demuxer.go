@@ -26,15 +26,12 @@ const (
 	VideoCodeIdScreenV2 = VideoCodecId(6)
 	VideoCodeIdH264     = VideoCodecId(7)
 
-	VideoCodeIdAV1  = VideoCodecId(1635135537)
-	VideoCodeIdVP9  = VideoCodecId(1987063865)
-	VideoCodeIdHEVC = VideoCodecId(1752589105)
-
-	SoundFormatMP3   = SoundFormat(2)
-	SoundFormatG711A = SoundFormat(7)
-	SoundFormatG711B = SoundFormat(8)
-	SoundFormatAAC   = SoundFormat(10)
-	SoundFormatMP38K = SoundFormat(14)
+	SoundFormatMP3      = SoundFormat(2)
+	SoundFormatG711A    = SoundFormat(7)
+	SoundFormatG711B    = SoundFormat(8)
+	SoundFormatAAC      = SoundFormat(10)
+	SoundFormatMP38K    = SoundFormat(14)
+	SoundFormatExHeader = SoundFormat(9)
 
 	SoundRate5500HZ  = SoundRate(0)
 	SoundRate11000HZ = SoundRate(1)
@@ -51,17 +48,31 @@ const (
 	PacketTypeMetaData             = PacketType(4) //元数据,例如:h265中的HDR信息
 	PacketTypeMPEG2TSSequenceStart = PacketType(5)
 
+	AudioPacketTypeSequenceStart      = PacketType(0)
+	AudioPacketTypeCodedFrames        = PacketType(1)
+	AudioPacketTypeSequenceEnd        = PacketType(2)
+	AudioPacketTypeMultichannelConfig = PacketType(4)
+	AudioPacketTypeMultiTrack         = PacketType(5)
+
 	TagHeaderSize = 15 //该长度包含preTagSize
 )
 
-type MP3Header uint32
+var (
+	VideoCodeIdAV1  = VideoCodecId(1635135537)
+	VideoCodeIdVP9  = VideoCodecId(1987063865)
+	VideoCodeIdHEVC = VideoCodecId(1752589105)
+)
+
+func init() {
+	VideoCodeIdAV1 = VideoCodecId(makeFourCc("av01"))
+	VideoCodeIdVP9 = VideoCodecId(makeFourCc("vp09"))
+	VideoCodeIdHEVC = VideoCodecId(makeFourCc("hvc1"))
+}
 
 type DeMuxer interface {
 	stream.DeMuxer
 
 	// InputVideo 输入不带tag的视频帧
-	// @ts rtmp是相对时间
-	//	   flv tag是绝对时间
 	InputVideo(data []byte, ts uint32) error
 
 	// InputAudio 输入不带tag的音频帧
@@ -86,18 +97,13 @@ type deMuxer struct {
 	*/
 	metaData []interface{}
 
-	headerCompleted bool
-	//保存当前正在读取的Tag
-	tag Tag
+	headerProcessed bool //是否已经读取到9字节的FLV头
 
-	audioIndex int
-	videoIndex int
-
-	audioTs int64
-	videoTs int64
-
-	completed bool
-
+	tag         Tag //保存当前正在读取的Tag
+	audioIndex  int
+	videoIndex  int
+	audioTs     int64
+	videoTs     int64
 	videoStream utils.AVStream
 	audioStream utils.AVStream
 }
@@ -110,10 +116,6 @@ type Tag struct {
 
 	data []byte
 	size int
-}
-
-func NewDeMuxer() DeMuxer {
-	return &deMuxer{audioIndex: -1, videoIndex: -1}
 }
 
 func (d *deMuxer) readScriptDataObject(data []byte) error {
@@ -197,12 +199,12 @@ func (d *deMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
 // Input 输入tag
 func (d *deMuxer) Input(data []byte) (int, error) {
 	var n int
-	if !d.headerCompleted {
+	if !d.headerProcessed {
 		if err := d.readHeader(data); err != nil {
 			return -1, err
 		}
 
-		d.headerCompleted = true
+		d.headerProcessed = true
 		n = 9
 	}
 
@@ -272,11 +274,10 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 	}
 
 	if sequenceHeader {
-		if d.completed {
+		if d.audioStream != nil {
 			return nil
 		}
 
-		var stream utils.AVStream
 		var config utils.CodecData
 		extraData := make([]byte, len(data[n:]))
 		copy(extraData, data[n:])
@@ -297,24 +298,34 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 			config = self
 		}
 
-		stream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, extraData, config)
-		d.videoStream = stream
-
+		d.videoStream = utils.NewAVStream(utils.AVMediaTypeVideo, d.videoIndex, codecId, extraData, config)
 		d.Handler.OnDeMuxStream(d.videoStream)
 		if d.audioIndex != -1 {
 			d.Handler.OnDeMuxStreamDone()
 		}
-	} else {
-		if d.videoStream == nil {
-			return fmt.Errorf("missing video sequence header")
-		}
 
-		var duration = int64(ts) - d.videoTs
-		d.videoTs = int64(ts)
-		packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex, 1000)
-		packet.SetDuration(duration)
-		d.Handler.OnDeMuxPacket(packet)
+		return nil
 	}
+
+	if d.videoStream == nil {
+		return fmt.Errorf("missing video sequence header")
+	}
+
+	var duration int64
+	if d.videoTs != -1 {
+		duration = int64(ts) - d.videoTs
+	}
+
+	//时间戳溢出
+	//ts是累加的, 除了溢出, 不会存在时间戳比前一个帧小的情况
+	if d.videoTs != -1 && int64(ts) < d.videoTs {
+		duration = 0xFFFFFFFF - d.videoTs + int64(ts)
+	}
+
+	d.videoTs = int64(ts)
+	packet := utils.NewVideoPacket(data[n:], d.videoTs, d.videoTs+int64(ct), key, utils.PacketTypeAVCC, codecId, d.videoIndex, 1000)
+	packet.SetDuration(duration)
+	d.Handler.OnDeMuxPacket(packet)
 
 	return nil
 }
@@ -330,7 +341,7 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 	}
 
 	if d.audioStream == nil {
-		if d.completed {
+		if d.audioStream != nil {
 			return nil
 		}
 
@@ -350,16 +361,23 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 			d.Handler.OnDeMuxStreamDone()
 		}
 
-		if n >= len(data) {
-			return nil
-		}
+		return nil
 	}
 
 	if d.audioStream == nil {
 		return fmt.Errorf("missing audio sequence header")
 	}
 
-	var duration = int64(ts) - d.audioTs
+	var duration int64
+	if d.audioTs != -1 {
+		duration = int64(ts) - d.audioTs
+	}
+
+	//时间戳溢出
+	if d.audioTs != -1 && int64(ts) < d.audioTs {
+		duration = 0xFFFFFFFF - d.audioTs + int64(ts)
+	}
+
 	d.audioTs = int64(ts)
 	packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex, 1000)
 	packet.SetDuration(duration)
@@ -395,6 +413,8 @@ func ParseAudioData(data []byte) (int, bool, utils.AVCodecID, error) {
 		return 1, false, utils.AVCodecIdPCMALAW, nil
 	} else if byte(SoundFormatG711B) == soundFormat {
 		return 1, false, utils.AVCodecIdPCMMULAW, nil
+	} else if byte(SoundFormatExHeader) == soundFormat {
+
 	}
 
 	return -1, false, utils.AVCodecIdNONE, fmt.Errorf("the codec %d is currently not supported in FLV", soundFormat)
@@ -467,4 +487,13 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 	}
 
 	return -1, false, false, utils.AVCodecIdNONE, 0, fmt.Errorf("the codec %d is currently not supported in FLV", codeId)
+}
+
+func makeFourCc(str string) uint32 {
+	utils.Assert(len(str) == 4)
+	return binary.BigEndian.Uint32([]byte(str))
+}
+
+func NewDeMuxer() DeMuxer {
+	return &deMuxer{audioIndex: -1, videoIndex: -1, audioTs: -1, videoTs: -1}
 }
