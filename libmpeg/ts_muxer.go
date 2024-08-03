@@ -95,7 +95,7 @@ func (t *tsMuxer) AddTrack(mediaType utils.AVMediaType, id utils.AVCodecID, extr
 			track.extraConfig = record
 			//adts header
 			track.extraWriteBuffer = make([]byte, 7)
-		} else if utils.AVCodecIdH264 == id {
+		} else {
 			track.extra = extra
 		}
 	}
@@ -133,7 +133,7 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 		size += len(bytes)
 	}
 
-	track.pes.ptsDtsFlags = PesExistPtsMark
+	track.pes.ptsDtsFlags = PesExistPtsDtsMark
 	track.pes.dts = dts
 	track.pes.pts = pts
 
@@ -236,7 +236,7 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, pts, dts int64, key bool) e
 		audioConfig := track.extraConfig.(*utils.MPEG4AudioConfig)
 		utils.SetADtsHeader(track.extraWriteBuffer, 0, audioConfig.ObjectType-1, audioConfig.SamplingIndex, audioConfig.ChanConfig, 7+len(data))
 		return t.write(track, pts, dts, track.extraWriteBuffer, data)
-	} else if utils.AVCodecIdH264 == track.codecId && key && track.extra != nil {
+	} else if utils.AVMediaTypeVideo == track.mediaType && key && track.extra != nil {
 		return t.write(track, pts, dts, track.extra, data)
 	}
 
