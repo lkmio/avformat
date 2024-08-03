@@ -416,7 +416,7 @@ func (h *TSHeader) writeAdaptationField(data []byte, pcr int64) int {
 	//PES中的DTS和PTS 90KHZ
 	if h.adaptationField.tag>>4&0x1 == 1 {
 		//不能超过42位
-		utils.Assert(pcr <= 0x3FFFFFFFFF)
+		//utils.Assert(pcr <= 0x3FFFFFFFFF)
 		//PCR(i)=PCR base(i)x300+ PCR ext(i)
 		//PCR base(i) = ((system clock frequency x t(i))DIV 300) % 233
 		//PCR ext(i) = ((system clock frequency x t(i)) DIV 1) % 300

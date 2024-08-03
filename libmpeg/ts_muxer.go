@@ -229,6 +229,8 @@ func (t *tsMuxer) Input(trackIndex int, data []byte, pts, dts int64, key bool) e
 		t.endTS = pts
 	}
 
+	pts = pts % 0x1FFFFFFFF
+	dts = dts % 0x1FFFFFFFF
 	track := t.tracks[trackIndex]
 	if track.codecId == utils.AVCodecIdAAC && track.extraConfig != nil {
 		audioConfig := track.extraConfig.(*utils.MPEG4AudioConfig)
