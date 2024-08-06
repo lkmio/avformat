@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/lkmio/avformat/libavc"
 	"github.com/lkmio/avformat/libhevc"
+	"time"
 )
 
 type PacketType byte
@@ -18,7 +19,11 @@ type AVPacket interface {
 
 	Pts() int64
 
+	SetPts(pts int64)
+
 	Dts() int64
+
+	SetDts(dts int64)
 
 	KeyFrame() bool
 
@@ -43,6 +48,8 @@ type AVPacket interface {
 	SetDuration(duration int64)
 
 	Duration(timebase int) int64
+
+	CreatedTime() int64
 }
 
 type avPacket struct {
@@ -57,24 +64,21 @@ type avPacket struct {
 	duration int64
 	key      bool
 
-	//打包模式
-	packetType PacketType
-	//冗余媒体类型
-	mediaType AVMediaType
-	//冗余编码器Id
-	codecId AVCodecID
+	index       int
+	timebase    int
+	createdTime int64 //创建Packet的Unix时间
 
-	index int
-
-	timebase int
+	packetType PacketType  //视频打包模式
+	mediaType  AVMediaType //冗余媒体类型
+	codecId    AVCodecID   //冗余编码器Id
 }
 
 func NewAudioPacket(data []byte, dts, pts int64, id AVCodecID, index int, timebase int) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: true, mediaType: AVMediaTypeAudio, codecId: id, index: index, timebase: timebase}
+	return &avPacket{data: data, dts: dts, pts: pts, key: true, mediaType: AVMediaTypeAudio, codecId: id, index: index, timebase: timebase, createdTime: time.Now().UnixMilli()}
 }
 
 func NewVideoPacket(data []byte, dts, pts int64, key bool, packetType PacketType, id AVCodecID, index int, timebase int) AVPacket {
-	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index, timebase: timebase}
+	return &avPacket{data: data, dts: dts, pts: pts, key: key, packetType: packetType, mediaType: AVMediaTypeVideo, codecId: id, index: index, timebase: timebase, createdTime: time.Now().UnixMilli()}
 }
 
 func ConvertTs(ts int64, srcTimeBase, dstTimeBase int) int64 {
@@ -180,4 +184,16 @@ func (pkt *avPacket) Duration(timebase int) int64 {
 	}
 
 	return ConvertTs(pkt.duration, pkt.timebase, timebase)
+}
+
+func (pkt *avPacket) SetPts(pts int64) {
+	pkt.pts = pts
+}
+
+func (pkt *avPacket) SetDts(dts int64) {
+	pkt.dts = dts
+}
+
+func (pkt *avPacket) CreatedTime() int64 {
+	return pkt.createdTime
 }
