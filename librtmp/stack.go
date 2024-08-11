@@ -34,9 +34,9 @@ func init() {
 }
 
 type OnEventHandler interface {
-	OnPublish(app, stream string, response chan utils.HookState)
+	OnPublish(app, stream string) utils.HookState
 
-	OnPlay(app, stream string, response chan utils.HookState)
+	OnPlay(app, stream string) utils.HookState
 }
 
 type OnPublishHandler interface {
@@ -442,19 +442,15 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 				}
 			}
 
-			state := make(chan utils.HookState, 1)
-			s.handler.OnPublish(s.app, s.stream, state)
+			state := s.handler.OnPublish(s.app, s.stream)
 
-			//在未收到响应之前，拒绝接受任何消息
-			select {
-			case response := <-state:
-				if utils.HookStateOK == response {
-					return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start publishing")
-				} else {
-					return s.sendStatus(conn, transactionId, "error", "NetStream.Publish.BadName", "Already publishing")
-				}
+			if utils.HookStateOK == state {
+				return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start publishing")
+			} else if utils.HookStateOccupy == state {
+				return s.sendStatus(conn, transactionId, "error", "NetStream.Publish.BadName", "Already publishing")
+			} else {
+				conn.Close()
 			}
-
 		} else if MessagePlay == command {
 			for i := 2; i < len(amf0); i++ {
 				str, ok := amf0[i].(string)
@@ -465,19 +461,13 @@ func (s *Stack) ProcessMessage(conn net.Conn, chunk *Chunk) error {
 			}
 
 			s.playStreamId = chunk.sid
-			state := make(chan utils.HookState, 1)
-			s.handler.OnPlay(s.app, s.stream, state)
+			state := s.handler.OnPlay(s.app, s.stream)
 
-			//在未收到响应之前，拒绝接受任何消息
-			select {
-			case response := <-state:
-				if utils.HookStateOK == response {
-					return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start live")
-				} else {
-					return s.sendStatus(conn, transactionId, "error", "NetStream.Publish.BadName", "Already publishing")
-				}
+			if utils.HookStateOK == state {
+				return s.sendStatus(conn, transactionId, "status", "NetStream.Play.Start", "Start live")
+			} else {
+				conn.Close()
 			}
-
 		} else if MessageResult == command {
 
 		} else if MessageError == command {
