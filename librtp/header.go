@@ -2,7 +2,6 @@ package librtp
 
 import (
 	"encoding/binary"
-	"github.com/lkmio/avformat/libbufio"
 	"github.com/lkmio/avformat/utils"
 )
 
@@ -21,9 +20,9 @@ type Header struct {
 	cc        byte //4
 	m         byte //1
 	pt        byte //7
-	seq       int
-	timestamp uint32
-	ssrc      uint32
+	Seq       uint16
+	Timestamp uint32
+	SSRC      uint32
 
 	csrc             []uint32
 	extensionProfile uint16
@@ -31,13 +30,7 @@ type Header struct {
 	extensions       []uint32
 }
 
-func NewHeader() *Header {
-	return &Header{
-		v: VERSION,
-	}
-}
-
-func (h *Header) toBytes(dst []byte) int {
+func (h *Header) Marshal(dst []byte) int {
 	dst[0] = h.v << 6
 	dst[0] = dst[0] | (h.p << 5)
 	dst[0] = dst[0] | (h.x << 4)
@@ -45,31 +38,31 @@ func (h *Header) toBytes(dst []byte) int {
 	dst[1] = h.m << 7
 	dst[1] = dst[1] | (h.pt & 0x7F)
 
-	libbufio.WriteWORD(dst[2:], uint16(h.seq))
-	libbufio.WriteDWORD(dst[4:], h.timestamp)
-	libbufio.WriteDWORD(dst[8:], h.ssrc)
+	binary.BigEndian.PutUint16(dst[2:], h.Seq)
+	binary.BigEndian.PutUint32(dst[4:], h.Timestamp)
+	binary.BigEndian.PutUint32(dst[8:], h.SSRC)
 
 	//csrc
 	offset := FixedHeaderLength
 	if h.cc > 0 {
 		for i, v := range h.csrc {
 			offset += i * 4
-			libbufio.WriteDWORD(dst[offset:], v)
+			binary.BigEndian.PutUint32(dst[offset:], v)
 		}
 	}
 
 	//extension
 	if h.p > 0 {
-		libbufio.WriteWORD(dst[offset:], h.extensionProfile)
-		libbufio.WriteWORD(dst[offset+2:], h.extensionLength)
+		binary.BigEndian.PutUint16(dst[offset:], h.extensionProfile)
+		binary.BigEndian.PutUint16(dst[offset+2:], h.extensionLength)
 		offset += 4
 		for i, v := range h.extensions {
 			offset += i * 4
-			libbufio.WriteDWORD(dst[offset:], v)
+			binary.BigEndian.PutUint32(dst[offset:], v)
 		}
 	}
 
-	h.seq = (h.seq + 1) & 0xFFFF
+	h.Seq++
 	return offset
 }
 
@@ -117,4 +110,16 @@ func RollbackSeq(header []byte, nextSeq int) {
 	}
 
 	binary.BigEndian.PutUint16(header[2:], uint16(seq))
+}
+
+func ModifySSRC(header []byte, ssrc uint32) {
+	binary.BigEndian.PutUint32(header[8:], ssrc)
+}
+
+func NewHeader(pt int) *Header {
+	return &Header{
+		v:   VERSION,
+		pt:  byte(pt),
+		Seq: 0,
+	}
 }

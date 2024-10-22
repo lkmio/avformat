@@ -55,7 +55,7 @@ func (m *muxer) SetParams(params interface{}) {
 func (m *muxer) compose(bytes []byte, data ...[]byte) int {
 	//内部拷贝, 内存拷贝消耗低于用户态和内核态的交互
 	//seq内部自行递增
-	n := m.header.toBytes(bytes)
+	n := m.header.Marshal(bytes)
 	for _, data_ := range data {
 		copy(bytes[n:], data_)
 		n += len(data_)
@@ -67,7 +67,7 @@ func (m *muxer) compose(bytes []byte, data ...[]byte) int {
 func (m *muxer) mux(ts uint32, end bool, data ...[]byte) {
 	bytes := m.allocHandler(m.params)
 
-	m.header.timestamp = ts
+	m.header.Timestamp = ts
 	//Set mark for the last packet.
 	if m.enableMark {
 		if end {
@@ -93,7 +93,7 @@ func splitPayloadData(data []byte, size int, callback func(data []byte, start, e
 }
 
 func (m *muxer) Input(data []byte, timestamp uint32) {
-	m.header.timestamp = timestamp
+	m.header.Timestamp = timestamp
 	splitPayloadData(data, m.maxPayloadSize, func(payload []byte, start, end bool) {
 		m.mux(timestamp, end, payload)
 	})
@@ -106,10 +106,9 @@ func (m *muxer) Close() {
 }
 
 func (m *muxer) init(payload int, seq int, ssrc uint32) {
-	header := NewHeader()
-	header.pt = byte(payload)
-	header.seq = seq
-	header.ssrc = ssrc
+	header := NewHeader(payload)
+	header.Seq = uint16(seq)
+	header.SSRC = ssrc
 	m.header = header
 	m.headerLength = FixedHeaderLength
 	m.maxPayloadSize = PacketMaxSize - m.headerLength
