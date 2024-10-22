@@ -16,3 +16,13 @@ func RandStringBytes(n int) string {
 
 	return string(b)
 }
+
+// RandomIntInRange 返回在[min, max]范围内的随机整数
+func RandomIntInRange(min, max int) int {
+	if min > max {
+		panic("min should not be greater than max")
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	return rand.Intn(max-min+1) + min
+}
