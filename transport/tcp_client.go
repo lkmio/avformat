@@ -8,28 +8,29 @@ import (
 
 type TCPClient struct {
 	transport
-	conn net.Conn
+	conn     net.Conn
+	listener *net.TCPListener
 }
 
 func (t *TCPClient) Bind(addr net.Addr) error {
-	panic("please use the connect func")
+	return nil
 }
 
-func (t *TCPClient) Connect(local, addr *net.TCPAddr) error {
+func (t *TCPClient) Connect(local, remote *net.TCPAddr) (net.Conn, error) {
 	dialer := net.Dialer{
 		LocalAddr: local,
 	}
 
-	tcp, err := dialer.Dial("tcp", addr.String())
+	tcp, err := dialer.Dial("tcp", remote.String())
 	if err != nil {
 		t.Close()
-		return err
+		return nil, err
 	}
 
 	t.conn = tcp
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.setListenAddr(tcp.LocalAddr())
-	return nil
+	return t.conn, nil
 }
 
 func (t *TCPClient) Receive() {

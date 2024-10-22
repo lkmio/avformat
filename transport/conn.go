@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"net"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,7 +17,7 @@ type Conn struct {
 
 	Data    interface{}                    //绑定参数
 	closeCb func(conn net.Conn, err error) //主动调用Close时回调
-	active  bool
+	closed  atomic.Bool
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
@@ -61,12 +62,10 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	}
 }
 
-func (c *Conn) IsActive() bool {
-	return c.active
-}
-
 func (c *Conn) Close() error {
-	c.active = false
+	if closed := c.closed.Swap(true); closed {
+		return nil
+	}
 
 	err := c.conn.Close()
 
@@ -77,6 +76,7 @@ func (c *Conn) Close() error {
 	if c.cancelCtx != nil {
 		c.cancelFunc()
 	}
+
 	return err
 }
 
@@ -105,5 +105,5 @@ func (c *Conn) ReallocateRecvBuffer(size int) {
 }
 
 func NewConn(conn net.Conn) *Conn {
-	return &Conn{conn: conn, active: true}
+	return &Conn{conn: conn /*, active: true*/}
 }

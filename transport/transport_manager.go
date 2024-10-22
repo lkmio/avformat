@@ -16,6 +16,8 @@ type Manager interface {
 	NewTCPServer(ip string) (*TCPServer, error)
 
 	NewUDPServer(ip string) (*UDPServer, error)
+
+	NewUDPClient(ip string, remoteAddr *net.UDPAddr) (*UDPClient, error)
 }
 
 type transportManager struct {
@@ -51,6 +53,20 @@ func (t *transportManager) NewUDPServer(ip string) (*UDPServer, error) {
 	})
 
 	return &server, err
+}
+
+func (t *transportManager) NewUDPClient(ip string, remoteAddr *net.UDPAddr) (*UDPClient, error) {
+	client := UDPClient{}
+	err := t.AllocPort(false, func(port uint16) error {
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			return err
+		}
+
+		return client.Connect(addr, remoteAddr)
+	})
+
+	return &client, err
 }
 
 func (t *transportManager) AllocPort(tcp bool, cb func(port uint16) error) error {

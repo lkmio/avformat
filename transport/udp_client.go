@@ -16,7 +16,14 @@ func (u *UDPClient) Bind(addr net.Addr) error {
 }
 
 func (u *UDPClient) Connect(local, remote *net.UDPAddr) error {
-	udp, err := net.DialUDP("udp", local, remote)
+	var udp *net.UDPConn
+	var err error
+	if remote == nil {
+		udp, err = net.ListenUDP("udp", local)
+	} else {
+		udp, err = net.DialUDP("udp", local, remote)
+	}
+
 	if err != nil {
 		u.Close()
 		return err

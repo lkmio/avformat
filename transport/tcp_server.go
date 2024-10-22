@@ -14,6 +14,12 @@ type TCPServer struct {
 func (t *TCPServer) Bind(addr net.Addr) error {
 	utils.Assert(t.listeners == nil)
 
+	random := addr == nil
+	if random {
+		t.ConcurrentNumber = 1
+		addr, _ = net.ResolveTCPAddr("tcp", ":0")
+	}
+
 	config := net.ListenConfig{
 		Control: t.GetSetOptFunc(),
 	}
@@ -28,7 +34,12 @@ func (t *TCPServer) Bind(addr net.Addr) error {
 		}
 
 		t.listeners = append(t.listeners, listen.(*net.TCPListener))
-		t.setListenAddr(addr)
+
+		if random {
+			t.setListenAddr(listen.Addr())
+		} else {
+			t.setListenAddr(addr)
+		}
 	}
 
 	return nil
