@@ -1,5 +1,7 @@
 package utils
 
+import "strconv"
+
 type AVCodecID int
 
 const (
@@ -530,3 +532,34 @@ const (
 	AVCodecIdFFMETADATA     = AVCodecID(0x21000) ///< Dummy codec for streams containing only metadata information.
 	AVCodecIdWRAPPEDAVFRAME = AVCodecID(0x21001) ///< Passthrough codec, AVFrames wrapped in AVPacket
 )
+
+func (a AVCodecID) String() string {
+	switch a {
+	case AVCodecIdH263:
+		return "H263"
+	case AVCodecIdH264:
+		return "H264"
+	case AVCodecIdH265:
+		return "H265"
+	case AVCodecIdVP8:
+		return "VP8"
+	case AVCodecIdVP9:
+		return "VP9"
+	case AVCodecIdAV1:
+		return "AV1"
+
+	case AVCodecIdAAC:
+		return "AAC"
+	case AVCodecIdPCMALAW:
+		return "G711A"
+	case AVCodecIdPCMMULAW:
+		return "G711U"
+	case AVCodecIdOPUS:
+		return "OPUS"
+	case AVCodecIdMP3:
+		return "MP3"
+	default:
+
+		return strconv.Itoa(int(a))
+	}
+}
