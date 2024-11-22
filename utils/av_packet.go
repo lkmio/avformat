@@ -131,7 +131,7 @@ func (pkt *avPacket) AnnexBPacketData(stream AVStream) []byte {
 		return pkt.dataAnnexB[:pkt.dataAnnexBSize]
 	}
 
-	bytes := make([]byte, len(pkt.data)+64)
+	bytes := make([]byte, len(pkt.data)+256)
 	var n int
 	if AVCodecIdH264 == pkt.codecId {
 		n = libavc.AVCC2AnnexB(bytes, pkt.data, nil)
@@ -162,7 +162,7 @@ func (pkt *avPacket) AVCCPacketData() []byte {
 		return pkt.dataAVCC[:pkt.dataAVCCSize]
 	}
 
-	bytes := make([]byte, len(pkt.data)+64)
+	bytes := make([]byte, len(pkt.data)+256)
 	n := libavc.AnnexB2AVCC(bytes, pkt.data)
 	pkt.dataAVCC = bytes
 	pkt.dataAVCCSize = n

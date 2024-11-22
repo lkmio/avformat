@@ -11,8 +11,8 @@ var (
 	StartCode4 = []byte{0x00, 0x00, 0x00, 0x01}
 )
 
-// FindStartCode 返回NalUHeader位置
-func FindStartCode(p []byte) int {
+// FindStartCode 返回NalUHeader索引和start code长度
+func FindStartCode(p []byte) (int, int) {
 	length := len(p)
 	i := 2
 
@@ -30,16 +30,22 @@ func FindStartCode(p []byte) int {
 	}
 
 	if i < length {
-		return i
+		// 计算start code长度
+		size := 3
+		if i > 3 && p[i-4] == 0x0 {
+			size++
+		}
+
+		return i, size
 	} else {
-		return -1
+		return -1, -1
 	}
 }
 
-// FindStartCodeWithReader 返回start code值
+// FindStartCodeWithReader 返回NalUHeader的值
 func FindStartCodeWithReader(reader libbufio.BytesReader) int {
 	data := reader.Data()
-	index := FindStartCode(data)
+	index, _ := FindStartCode(data)
 	if index < 0 {
 		return -1
 	}
@@ -50,26 +56,18 @@ func FindStartCodeWithReader(reader libbufio.BytesReader) int {
 
 // FindStartCode2 返回start code的起始位置
 func FindStartCode2(p []byte) int {
-	index := FindStartCode(p)
+	index, length := FindStartCode(p)
 	if index < 0 {
 		return index
 	}
 
-	index -= 4
-
-	if index < 0 {
-		return 0
-	} else if p[index] == 0 {
-		return index
-	} else {
-		return index + 1
-	}
+	return index - length
 }
 
 func IsKeyFrame(p []byte) bool {
 	index := 0
 	for {
-		n := FindStartCode(p[index:])
+		n, _ := FindStartCode(p[index:])
 		if n < 0 {
 			return false
 		}
@@ -91,7 +89,7 @@ func IsKeyFrame(p []byte) bool {
 
 func ParseNalUnits(p []byte) int {
 	for {
-		index := FindStartCode(p)
+		index, _ := FindStartCode(p)
 		state := p[index]
 		switch state & 0x1F {
 		case H264NalSlice:
@@ -185,28 +183,32 @@ func AVCC2AnnexB(dst []byte, avcc []byte, extra []byte) int {
 
 func AnnexB2AVCC(dst []byte, annexB []byte) int {
 	length := len(annexB)
+	// avcc包大小
 	size := 0
-	nalStart := FindStartCode(annexB)
+	nalStart, _ := FindStartCode(annexB)
 	if nalStart < 0 {
 		return 0
 	}
 
-	for {
+	for nalStart < length {
+		// 跳过开头空包(连续0000000100000001)
 		for nalStart < length && annexB[nalStart] == 0 {
 			nalStart++
 		}
-
-		if nalStart == length {
-			return size
+		if nalStart >= length {
+			break
 		}
 
-		nalEnd := FindStartCode(annexB[nalStart:])
+		nalEnd, n := FindStartCode(annexB[nalStart:])
+		// 最后一个nalu
 		if nalEnd < 0 {
 			nalEnd = len(annexB[nalStart:])
+			n = 0
 		}
 
-		nalSize := nalEnd - 4
-		if nalSize < 0 || annexB[nalStart:][nalSize] != 0x0 {
+		nalSize := nalEnd - n
+		// 空包, 保存前一个nalu(1个字节header)
+		if nalSize == 0 {
 			nalSize++
 		}
 
@@ -217,6 +219,8 @@ func AnnexB2AVCC(dst []byte, annexB []byte) int {
 		size += nalSize
 		nalStart += nalEnd
 	}
+
+	return size
 }
 
 func Mp4ToAnnexB(buffer libbufio.ByteBuffer, data, extra []byte) {
@@ -286,13 +290,14 @@ func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
 
 func SplitNalU(data []byte, cb func(nalu []byte)) {
 	var offset int
-	//+3查找第二个nalu
+	// +3查找第二个nalu
 	for n := FindStartCode2(data[offset+3:]); n > -1; n = FindStartCode2(data[offset+3:]) {
 		n += 3
 		cb(data[offset : offset+n])
 		offset += n
 	}
 
+	// 回调最后一个nalu
 	cb(data[offset:])
 }
 

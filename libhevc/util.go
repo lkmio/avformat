@@ -116,7 +116,7 @@ func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, []byte, error) {
 func IsKeyFrame(p []byte) bool {
 	index := 0
 	for {
-		n := libavc.FindStartCode(p[index:])
+		n, _ := libavc.FindStartCode(p[index:])
 		if n < 0 {
 			return false
 		}
