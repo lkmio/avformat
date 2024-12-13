@@ -2,7 +2,6 @@ package librtmp
 
 import (
 	"encoding/binary"
-	"fmt"
 	"github.com/lkmio/avformat/libbufio"
 	"github.com/lkmio/avformat/utils"
 )
@@ -18,10 +17,10 @@ type TransactionID int
 
 /*
 Chunk Format
-Each chunk consists of a header and data. The header itself has
+Each Chunk consists of a header and Body. The header itself has
 three parts:
 +--------------+----------------+--------------------+--------------+
-| Basic Header | Chunk Header | Extended Timestamp | Chunk Data |
+| Basic Header | Chunk Header | Extended Timestamp | Chunk Body |
 +--------------+----------------+--------------------+--------------+
 | |
 |<------------------- Chunk Header ----------------->|
@@ -104,57 +103,38 @@ const (
 )
 
 type Chunk struct {
-	//basic header
-	type_ ChunkType     //fmt 1-3bytes.低6位等于0,2字节;低6位等于1,3字节
-	csid  ChunkStreamID //chunk stream id. customized by users
+	// basic header
+	Type           ChunkType     // fmt 1-3bytes.低6位等于0,2字节;低6位等于1,3字节
+	ChunkStreamID_ ChunkStreamID // currentChunk stream id. customized by users
 
-	Timestamp uint32        //type0-绝对时间戳/type1和type2-与上一个chunk的差值
-	Length    int           //message length
-	tid       MessageTypeID //message type id
-	sid       uint32        //message stream id. customized by users. LittleEndian
+	Timestamp uint32        // type0-绝对时间戳/type1和type2-与上一个chunk的差值
+	Length    int           // message length
+	TypeID    MessageTypeID // message type id
+	StreamID  uint32        // message stream id. customized by users. LittleEndian
 
-	//body
-	data []byte
-	//实际接受到的chunk大小
-	size int
+	Body []byte // 消息体
+	Size int    // 消息体大小
 }
 
-func NewAudioChunk() Chunk {
-	//	CHUNK_TYPE_0,CHUNK_STREAM_ID_AUDIO,ts,MESSAGE_TYPE_ID_AUDIO,0,data,size
-	return Chunk{
-		type_: ChunkType0,
-		csid:  ChunkStreamIdAudio,
-		tid:   MessageTypeIDAudio,
-	}
-}
-
-func NewVideoChunk() Chunk {
-	return Chunk{
-		type_: ChunkType0,
-		csid:  ChunkStreamIdVideo,
-		tid:   MessageTypeIDVideo,
-	}
-}
-
-func (h *Chunk) ToBytes(dst []byte) int {
+func (h *Chunk) MarshalHeader(dst []byte) int {
 	var index int
 	index++
 
-	dst[0] = byte(h.type_) << 6
-	if h.csid <= 63 {
-		dst[0] = dst[0] | byte(h.csid)
-	} else if h.csid <= 0xFF {
+	dst[0] = byte(h.Type) << 6
+	if h.ChunkStreamID_ <= 63 {
+		dst[0] = dst[0] | byte(h.ChunkStreamID_)
+	} else if h.ChunkStreamID_ <= 0xFF {
 		dst[0] = dst[0] & 0xC0
-		dst[1] = byte(h.csid)
+		dst[1] = byte(h.ChunkStreamID_)
 		index++
-	} else if h.csid <= 0xFFFF {
+	} else if h.ChunkStreamID_ <= 0xFFFF {
 		dst[0] = dst[0] & 0xC0
 		dst[0] = dst[0] | 0x1
-		binary.BigEndian.PutUint16(dst[1:], uint16(h.csid))
+		binary.BigEndian.PutUint16(dst[1:], uint16(h.ChunkStreamID_))
 		index += 2
 	}
 
-	if h.type_ < ChunkType3 {
+	if h.Type < ChunkType3 {
 		if h.Timestamp >= 0xFFFFFF {
 			libbufio.WriteUInt24(dst[index:], 0xFFFFFF)
 		} else {
@@ -163,14 +143,14 @@ func (h *Chunk) ToBytes(dst []byte) int {
 		index += 3
 	}
 
-	if h.type_ < ChunkType2 {
+	if h.Type < ChunkType2 {
 		libbufio.WriteUInt24(dst[index:], uint32(h.Length))
 		index += 4
-		dst[index-1] = byte(h.tid)
+		dst[index-1] = byte(h.TypeID)
 	}
 
-	if h.type_ < ChunkType1 {
-		binary.LittleEndian.PutUint32(dst[index:], h.sid)
+	if h.Type < ChunkType1 {
+		binary.LittleEndian.PutUint32(dst[index:], h.StreamID)
 		index += 4
 	}
 
@@ -182,20 +162,20 @@ func (h *Chunk) ToBytes(dst []byte) int {
 	return index
 }
 
-func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
-	utils.Assert(len(h.data) >= h.Length)
-	n := h.ToBytes(data)
+func (h *Chunk) Marshal(dst []byte, chunkSize int) int {
+	utils.Assert(len(h.Body) >= h.Length)
+	n := h.MarshalHeader(dst)
 	var length = h.Length
 
 	for length > 0 {
 		if length != h.Length {
-			data[n] = byte((0x3 << 6) | h.csid)
+			dst[n] = byte((0x3 << 6) | h.ChunkStreamID_)
 			n++
 		}
 
 		consume := libbufio.MinInt(length, chunkSize)
 		offset := h.Length - length
-		copy(data[n:], h.data[offset:offset+consume])
+		copy(dst[n:], h.Body[offset:offset+consume])
 		length -= consume
 		n += consume
 	}
@@ -203,7 +183,7 @@ func (h *Chunk) ToBytes2(data []byte, chunkSize int) int {
 	return n
 }
 
-func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
+func (h *Chunk) WriteBody(dst, data []byte, chunkSize int, offset int) int {
 	utils.Assert(chunkSize-offset > 0)
 	length := len(data)
 	var n int
@@ -223,9 +203,9 @@ func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
 		length -= min
 		data = data[min:]
 
-		//写一个ChunkType3用作分割
+		// 写一个ChunkType3用作分割
 		if length > 0 {
-			dst[n] = (0x3 << 6) | byte(h.csid)
+			dst[n] = (0x3 << 6) | byte(h.ChunkStreamID_)
 			n++
 
 			if h.Timestamp >= 0xFFFFFF {
@@ -238,70 +218,31 @@ func (h *Chunk) WriteData(dst, data []byte, chunkSize int, offset int) int {
 	return n
 }
 
-func readBasicHeader(src []byte) (ChunkType, ChunkStreamID, int, error) {
-	t := ChunkType(src[0] >> 6)
-	if t > 0x3 {
-		return t, 0, 0, fmt.Errorf("unknow chunk type:%d", t)
-	}
-
-	switch src[0] & 0x3F {
-	case 0:
-		//64-(64+255)
-		return t, ChunkStreamID(64 + int(src[1])), 2, nil
-	case 1:
-		//64-(65535+64)
-		return t, ChunkStreamID(64 + int(binary.BigEndian.Uint16(src[1:]))), 3, nil
-	//case 2:
-	default:
-		//1bytes
-		return t, ChunkStreamID(src[0] & 0x3F), 1, nil
-	}
-}
-
 func (h *Chunk) Reset() {
-	//h.csid = 0
+	//h.ChunkStreamID_ = 0
 	//如果当前包没有携带timestamp字段, 默认和前一包一致
 	//h.Timestamp = 0
 	//如果当前包没有携带length字段, 默认和前一包一致
 	//h.Length = 0
 	//如果当前包没有携带tid字段, 默认和前一包一致
-	//h.tid = 0
-	h.sid = 0
-	h.size = 0
+	//h.TypeID = 0
+	h.StreamID = 0
+	h.Size = 0
 }
 
-func readChunkHeader(src []byte) (Chunk, int, error) {
-	t, csid, i, err := readBasicHeader(src)
-	if err != nil {
-		return Chunk{}, 0, err
+func NewAudioChunk() Chunk {
+	//	CHUNK_TYPE_0,CHUNK_STREAM_ID_AUDIO,ts,MESSAGE_TYPE_ID_AUDIO,0,Body,Size
+	return Chunk{
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdAudio,
+		TypeID:         MessageTypeIDAudio,
 	}
+}
 
-	header := Chunk{
-		type_: t,
-		csid:  csid,
+func NewVideoChunk() Chunk {
+	return Chunk{
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdVideo,
+		TypeID:         MessageTypeIDVideo,
 	}
-
-	if header.type_ < ChunkType3 {
-		header.Timestamp = uint32(libbufio.BytesToInt(src[i : i+3]))
-		i += 3
-	}
-
-	if header.type_ < ChunkType2 {
-		i += 3
-		header.Length = libbufio.BytesToInt(src[i-3 : i])
-		header.tid = MessageTypeID(src[i])
-		i++
-	}
-
-	if header.type_ < ChunkType1 {
-		header.sid = binary.LittleEndian.Uint32(src[i:])
-		i += 4
-	}
-
-	if header.Timestamp == 0xFFFFFF {
-		header.Timestamp = binary.BigEndian.Uint32(src[i:])
-		i += 4
-	}
-
-	return header, i, nil
 }

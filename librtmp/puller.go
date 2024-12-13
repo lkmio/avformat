@@ -14,25 +14,6 @@ import (
 	"time"
 )
 
-type HandshakeState byte
-type ParserState byte
-
-const (
-	HandshakeStateUninitialized = HandshakeState(0) //after the client sends C0
-	HandshakeStateVersionSent   = HandshakeState(1) //client waiting for S1
-	HandshakeStateAckSent       = HandshakeState(2) //client waiting for S2
-	HandshakeStateDone          = HandshakeState(3) //client receives S2
-
-	ParserStateInit              = ParserState(0)
-	ParserStateBasicHeader       = ParserState(1)
-	ParserStateTimestamp         = ParserState(2)
-	ParserStateMessageLength     = ParserState(3)
-	ParserStateStreamType        = ParserState(4)
-	ParserStateStreamId          = ParserState(5)
-	ParserStateExtendedTimestamp = ParserState(6)
-	ParserStatePayload           = ParserState(7)
-)
-
 var (
 	headerSize map[ChunkType]int
 )
@@ -78,7 +59,7 @@ func NewPuller(v OnVideo, a OnAudio) *Puller {
 
 func (p *Puller) findMessage(csid ChunkStreamID) *Chunk {
 	for _, message := range p.messages {
-		if message.csid == csid {
+		if message.ChunkStreamID_ == csid {
 			return message
 		}
 	}
@@ -239,12 +220,12 @@ func (p *Puller) connect() {
 	length := writer.ToBytes(bytes)
 
 	chunk := Chunk{
-		type_:     ChunkType0,
-		csid:      ChunkStreamIdSystem,
-		Timestamp: 0,
-		Length:    length,
-		tid:       MessageTypeIDCommandAMF0,
-		sid:       0,
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdSystem,
+		Timestamp:      0,
+		Length:         length,
+		TypeID:         MessageTypeIDCommandAMF0,
+		StreamID:       0,
 	}
 
 	p.sendMessage(chunk, bytes[:length])
@@ -252,15 +233,15 @@ func (p *Puller) connect() {
 
 func (p *Puller) sendWindowAcknowledgementSize() {
 	header := Chunk{
-		type_:     ChunkType0,
-		csid:      ChunkStreamIdNetwork,
-		Timestamp: 0,
-		Length:    4,
-		tid:       MessageTypeIDWindowAcknowledgementSize,
-		sid:       0,
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdNetwork,
+		Timestamp:      0,
+		Length:         4,
+		TypeID:         MessageTypeIDWindowAcknowledgementSize,
+		StreamID:       0,
 	}
 
-	bytes := header.ToBytes(p.commandBuffer)
+	bytes := header.MarshalHeader(p.commandBuffer)
 	binary.BigEndian.PutUint32(p.commandBuffer[bytes:], uint32(p.bandwidth))
 	_, _ = p.client.Write(p.commandBuffer[:4+bytes])
 }
@@ -273,15 +254,15 @@ func (p *Puller) createStream() {
 	length := writer.ToBytes(p.commandBuffer[12:])
 
 	header := Chunk{
-		type_:     ChunkType0,
-		csid:      ChunkStreamIdNetwork,
-		Timestamp: 0,
-		Length:    length,
-		tid:       MessageTypeIDCommandAMF0,
-		sid:       0,
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdNetwork,
+		Timestamp:      0,
+		Length:         length,
+		TypeID:         MessageTypeIDCommandAMF0,
+		StreamID:       0,
 	}
 
-	header.ToBytes(p.commandBuffer)
+	header.MarshalHeader(p.commandBuffer)
 	length += 12
 	_, _ = p.client.Write(p.commandBuffer[:length])
 }
@@ -301,37 +282,37 @@ func (p *Puller) play(streamId float64) {
 	length := writer.ToBytes(bytes)
 
 	chunk := Chunk{
-		type_:     ChunkType0,
-		csid:      ChunkStreamIdSystem,
-		Timestamp: 0,
-		Length:    length,
-		tid:       MessageTypeIDCommandAMF0,
-		sid:       uint32(streamId),
+		Type:           ChunkType0,
+		ChunkStreamID_: ChunkStreamIdSystem,
+		Timestamp:      0,
+		Length:         length,
+		TypeID:         MessageTypeIDCommandAMF0,
+		StreamID:       uint32(streamId),
 	}
 
 	p.sendMessage(chunk, bytes[:length])
 }
 
 func (p *Puller) processChunk(data []byte) error {
-	/*	length, i := len(data), 0
+	/*	length, i := len(Body), 0
 		for i < length {
 			switch p.parser.state {
 
 			case ParserStateInit:
 				*p.parser = Parser{}
 
-				t := ChunkType(data[i] >> 6)
+				t := ChunkType(Body[i] >> 6)
 				if t > ChunkType3 {
 					return fmt.Errorf("unknow chunk type:%d", t)
 				}
 
-				if data[i]&0x3F == 0 {
+				if Body[i]&0x3F == 0 {
 					p.parser.csidSize = 1
-				} else if data[i]&0x3F == 1 {
+				} else if Body[i]&0x3F == 1 {
 					p.parser.csidSize = 2
 				} else {
 					p.parser.csidSize = 0
-					p.parser.csid = ChunkStreamID(data[i] & 0x3F)
+					p.parser.ChunkStreamID_ = ChunkStreamID(Body[i] & 0x3F)
 				}
 
 				p.parser.chunkType = t
@@ -342,16 +323,16 @@ func (p *Puller) processChunk(data []byte) error {
 
 			case ParserStateBasicHeader:
 				for p.parser.csidSize > 0 {
-					p.parser.csid <<= 8
-					p.parser.csid |= ChunkStreamID(data[i])
+					p.parser.ChunkStreamID_ <<= 8
+					p.parser.ChunkStreamID_ |= ChunkStreamID(Body[i])
 					p.parser.csidSize--
 					i++
 				}
 
 				if p.parser.csidSize == 0 {
-					message := p.findMessage(p.parser.csid)
+					message := p.findMessage(p.parser.ChunkStreamID_)
 					if message == nil {
-						message = &Chunk{Chunk{type_: p.parser.chunkType, csid: p.parser.csid}, nil, 0}
+						message = &Chunk{Chunk{Type: p.parser.chunkType, ChunkStreamID_: p.parser.ChunkStreamID_}, nil, 0}
 					}
 					p.messages = append(p.messages, message)
 					p.parser.msg = message
@@ -367,7 +348,7 @@ func (p *Puller) processChunk(data []byte) error {
 			case ParserStateTimestamp:
 				for p.parser.headerOffset < 3 && i < length {
 					p.parser.msg.Timestamp <<= 8
-					p.parser.msg.Timestamp |= int(data[i])
+					p.parser.msg.Timestamp |= int(Body[i])
 					p.parser.headerOffset++
 					i++
 				}
@@ -387,7 +368,7 @@ func (p *Puller) processChunk(data []byte) error {
 			case ParserStateMessageLength:
 				for p.parser.headerOffset < 6 && i < length {
 					p.parser.msg.MessageLength <<= 8
-					p.parser.msg.MessageLength |= int(data[i])
+					p.parser.msg.MessageLength |= int(Body[i])
 					p.parser.headerOffset++
 					i++
 				}
@@ -398,7 +379,7 @@ func (p *Puller) processChunk(data []byte) error {
 				break
 
 			case ParserStateStreamType:
-				p.parser.msg.tid = MessageTypeID(data[i])
+				p.parser.msg.TypeID = MessageTypeID(Body[i])
 				i++
 				p.parser.headerOffset++
 				if p.parser.chunkType == ChunkType0 {
@@ -412,8 +393,8 @@ func (p *Puller) processChunk(data []byte) error {
 
 			case ParserStateStreamId:
 				for p.parser.headerOffset < 11 && i < length {
-					p.parser.msg.sid <<= 8
-					p.parser.msg.sid |= int(data[i])
+					p.parser.msg.StreamID <<= 8
+					p.parser.msg.StreamID |= int(Body[i])
 					p.parser.headerOffset++
 					i++
 				}
@@ -430,7 +411,7 @@ func (p *Puller) processChunk(data []byte) error {
 			case ParserStateExtendedTimestamp:
 				for p.parser.headerOffset < 15 && i < length {
 					p.parser.msg.Timestamp <<= 8
-					p.parser.msg.Timestamp |= int(data[i])
+					p.parser.msg.Timestamp |= int(Body[i])
 					p.parser.headerOffset++
 					i++
 				}
@@ -446,8 +427,8 @@ func (p *Puller) processChunk(data []byte) error {
 
 			case ParserStatePayload:
 				remain := length - i
-				need := p.parser.msg.MessageLength - p.parser.msg.size
-				consume := utils.MinInt(need, p.localChunkSize-(p.parser.msg.size%p.localChunkSize))
+				need := p.parser.msg.MessageLength - p.parser.msg.Size
+				consume := utils.MinInt(need, p.localChunkMaxSize-(p.parser.msg.Size%p.localChunkMaxSize))
 				consume = utils.MinInt(consume, remain)
 				if len(p.parser.msg.payload) < p.parser.msg.MessageLength {
 					bytes := make([]byte, p.parser.msg.MessageLength+1024)
@@ -455,12 +436,12 @@ func (p *Puller) processChunk(data []byte) error {
 					p.parser.msg.payload = bytes
 				}
 
-				copy(p.parser.msg.payload[p.parser.msg.size:], data[i:i+consume])
-				p.parser.msg.size += consume
+				copy(p.parser.msg.payload[p.parser.msg.Size:], Body[i:i+consume])
+				p.parser.msg.Size += consume
 
-				if p.parser.msg.size >= p.parser.msg.MessageLength {
-					if p.parser.msg.size != 0 {
-						err := p.processMessage(p.parser.msg.tid, p.parser.msg.payload[:p.parser.msg.size], p.parser.msg.Timestamp)
+				if p.parser.msg.Size >= p.parser.msg.MessageLength {
+					if p.parser.msg.Size != 0 {
+						err := p.processMessage(p.parser.msg.TypeID, p.parser.msg.payload[:p.parser.msg.Size], p.parser.msg.Timestamp)
 						if err != nil {
 							return err
 						}
@@ -468,7 +449,7 @@ func (p *Puller) processChunk(data []byte) error {
 
 					*p.parser.msg = Chunk{}
 					p.parser.state = ParserStateInit
-				} else if p.parser.msg.size%p.localChunkSize == 0 {
+				} else if p.parser.msg.Size%p.localChunkMaxSize == 0 {
 					p.parser.state = ParserStateInit
 				}
 
@@ -542,7 +523,7 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 			l := len(amf0)
 			var command string
 			if l == 0 {
-				return fmt.Errorf("invalid data")
+				return fmt.Errorf("invalid Body")
 			}
 
 			command, _ = amf0[0].(string)
@@ -576,10 +557,10 @@ func (p *Puller) sendMessage(header Chunk, payload []byte) {
 	for length > 0 {
 		minInt := libbufio.MinInt(p.chunkSize, length)
 		if length != len(payload) {
-			header.type_ = ChunkType3
+			header.Type = ChunkType3
 		}
 
-		index += header.ToBytes(p.commandBuffer[index:])
+		index += header.MarshalHeader(p.commandBuffer[index:])
 		copy(p.commandBuffer[index:], payload[len(payload)-length:len(payload)-length+minInt])
 		length -= minInt
 		index += minInt
