@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/lkmio/avformat/libbufio"
 	"github.com/lkmio/avformat/utils"
 )
 
@@ -388,7 +387,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	if length < 16 {
 		return -1, nil
 	}
-	totalLength := 6 + int(libbufio.BytesToUInt16(src[4], src[5]))
+	totalLength := 6 + int(binary.BigEndian.Uint16(src[4:]))
 	if totalLength > length {
 		return -1, nil
 	}
@@ -397,7 +396,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 	header.currentNextIndicator = src[6] >> 7
 	header.version = src[6] & 0x1F
 
-	infoLength := int(libbufio.BytesToUInt16(src[8], src[9]))
+	infoLength := int(binary.BigEndian.Uint16(src[8:]))
 	offset := 10
 	if infoLength > 0 {
 		// +2 reserved elementary_stream_map_length
@@ -409,14 +408,14 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 		header.info = src[10:offset]
 	}
 
-	elementaryLength := int(libbufio.BytesToUInt16(src[offset], src[offset+1]))
+	elementaryLength := int(binary.BigEndian.Uint16(src[offset:]))
 	offset += 2
 	if offset+elementaryLength > totalLength-4 {
 		return -1, fmt.Errorf("invalid data:%s", hex.EncodeToString(src))
 	}
 
 	for i := offset; i < offset+elementaryLength; i += 4 {
-		eInfoLength := int(libbufio.BytesToUInt16(src[i+2], src[i+3]))
+		eInfoLength := int(binary.BigEndian.Uint16(src[i+2:]))
 
 		if _, ok := header.findElementaryStream(src[i+1]); !ok {
 			element := ElementaryStream{}
@@ -437,8 +436,7 @@ func readProgramStreamMap(header *ProgramStreamMap, src []byte) (int, error) {
 		i += eInfoLength
 	}
 
-	header.crc32 = libbufio.BytesToUInt32(src[totalLength-4], src[totalLength-3], src[totalLength-2], src[totalLength-1])
-
+	header.crc32 = binary.BigEndian.Uint32(src[totalLength-4:])
 	return totalLength, nil
 }
 

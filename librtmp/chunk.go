@@ -136,15 +136,15 @@ func (h *Chunk) MarshalHeader(dst []byte) int {
 
 	if h.Type < ChunkType3 {
 		if h.Timestamp >= 0xFFFFFF {
-			libbufio.WriteUInt24(dst[index:], 0xFFFFFF)
+			libbufio.PutUint24(dst[index:], 0xFFFFFF)
 		} else {
-			libbufio.WriteUInt24(dst[index:], h.Timestamp)
+			libbufio.PutUint24(dst[index:], h.Timestamp)
 		}
 		index += 3
 	}
 
 	if h.Type < ChunkType2 {
-		libbufio.WriteUInt24(dst[index:], uint32(h.Length))
+		libbufio.PutUint24(dst[index:], uint32(h.Length))
 		index += 4
 		dst[index-1] = byte(h.TypeID)
 	}
@@ -236,6 +236,7 @@ func NewAudioChunk() Chunk {
 		Type:           ChunkType0,
 		ChunkStreamID_: ChunkStreamIdAudio,
 		TypeID:         MessageTypeIDAudio,
+		StreamID:       1,
 	}
 }
 
@@ -244,5 +245,6 @@ func NewVideoChunk() Chunk {
 		Type:           ChunkType0,
 		ChunkStreamID_: ChunkStreamIdVideo,
 		TypeID:         MessageTypeIDVideo,
+		StreamID:       1,
 	}
 }
