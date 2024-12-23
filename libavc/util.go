@@ -44,7 +44,7 @@ func FindStartCode(p []byte) (int, int) {
 
 // FindStartCodeWithReader 返回NalUHeader的值
 func FindStartCodeWithReader(reader libbufio.BytesReader) int {
-	data := reader.Data()
+	data := reader.RemainingBytes()
 	index, _ := FindStartCode(data)
 	if index < 0 {
 		return -1
@@ -114,7 +114,7 @@ func copyNalUWithBytes(dst []byte, data []byte, outSize int, append bool) int {
 			binary.BigEndian.PutUint32(dst[offset:], 0x1)
 			offset += 4
 		} else if startCodeSize != 0 {
-			libbufio.WriteUInt24(dst[offset:], 0x1)
+			libbufio.PutUint24(dst[offset:], 0x1)
 			offset += 3
 		}
 	}
@@ -123,7 +123,7 @@ func copyNalUWithBytes(dst []byte, data []byte, outSize int, append bool) int {
 	return startCodeSize + len(data)
 }
 
-func copyNalU(buffer libbufio.ByteBuffer, data []byte, outSize int, append bool) int {
+func copyNalU(writer libbufio.BytesWriter, data []byte, outSize int, append bool) int {
 	var startCodeSize int
 
 	if append {
@@ -134,14 +134,13 @@ func copyNalU(buffer libbufio.ByteBuffer, data []byte, outSize int, append bool)
 		}
 
 		if startCodeSize == 4 {
-			buffer.Write(StartCode4)
+			_ = writer.Write(StartCode4)
 		} else if startCodeSize != 0 {
-			buffer.Write(StartCode3)
+			_ = writer.Write(StartCode3)
 		}
 	}
 
-	buffer.Write(data)
-
+	_ = writer.Write(data)
 	return startCodeSize + len(data)
 }
 
@@ -223,7 +222,7 @@ func AnnexB2AVCC(dst []byte, annexB []byte) int {
 	return size
 }
 
-func Mp4ToAnnexB(buffer libbufio.ByteBuffer, data, extra []byte) {
+func Mp4ToAnnexB(writer libbufio.BytesWriter, data, extra []byte) {
 	length := len(data)
 	outSize, spsSeen, ppsSeen := 0, false, false
 	for index := 4; index < length; index += 4 {
@@ -231,6 +230,7 @@ func Mp4ToAnnexB(buffer libbufio.ByteBuffer, data, extra []byte) {
 		if size == 0 || length-index < size {
 			break
 		}
+
 		unitType := data[index] & 0x1F
 		switch unitType {
 		case H264NalSPS:
@@ -241,51 +241,61 @@ func Mp4ToAnnexB(buffer libbufio.ByteBuffer, data, extra []byte) {
 			break
 		case H264NalIDRSlice:
 			if !spsSeen && !ppsSeen {
-				outSize += copyNalU(buffer, extra, outSize, false)
+				outSize += copyNalU(writer, extra, outSize, false)
 			}
 			break
 		}
 
 		bytes := data[index : index+size]
-		outSize += copyNalU(buffer, bytes, outSize, true)
+		outSize += copyNalU(writer, bytes, outSize, true)
 		index += size
 	}
 }
 
 func M4VCExtraDataToAnnexB(src []byte) ([]byte, error) {
-	buffer := libbufio.NewByteBuffer(src)
+	reader := libbufio.NewBytesReader(src)
+
 	//unsigned int(8) configurationVersion = 1;
 	//unsigned int(8) AVCProfileIndication;
 	//unsigned int(8) profile_compatibility;
 	//unsigned int(8) AVCLevelIndication;
-	if err := buffer.PeekCount(6); err != nil {
+	if err := reader.Seek(4); err != nil {
 		return nil, err
 	}
 
-	buffer.Skip(4)
-	_ = buffer.ReadUInt8()&0x3 + 1
-	unitNb := buffer.ReadUInt8() & 0x1f
-	dstBuffer := libbufio.NewByteBuffer()
+	readUint8, err := reader.ReadUint8()
+	if err != nil {
+		return nil, err
+	}
+
+	readUint8 &= 0x3 + 1
+	unitNb, err := reader.ReadUint8()
+	unitNb &= 0x1f
+
 	spsDone := 0
+	writer := libbufio.NewBytesWriter(make([]byte, len(src)+256))
 	for unitNb != 0 {
 		unitNb--
 
-		if err := buffer.PeekCount(2); err != nil {
+		var size uint16
+		size, err = reader.ReadUint16()
+		if err != nil {
+			return nil, err
+		} else if err = writer.Write(StartCode4); err != nil {
+			return nil, err
+		} else if err = writer.Write(src[reader.Offset() : reader.Offset()+int(size)]); err != nil {
+			return nil, err
+		} else if err = reader.Seek(int(size)); err != nil {
 			return nil, err
 		}
-		size := int(buffer.ReadUInt16())
-		dstBuffer.Write(StartCode4)
-		readOffset := buffer.ReadOffset()
-		dstBuffer.Write(src[readOffset : readOffset+size])
-		buffer.Skip(size)
 
 		spsDone++
-		if buffer.ReadableBytes() > 2 && unitNb == 0 && spsDone == 1 {
-			unitNb = buffer.ReadUInt8()
+		if reader.ReadableBytes() > 2 && unitNb == 0 && spsDone == 1 {
+			unitNb, _ = reader.ReadUint8()
 		}
 	}
 
-	return dstBuffer.ToBytes(), nil
+	return writer.WrittenBytes(), nil
 }
 
 func SplitNalU(data []byte, cb func(nalu []byte)) {

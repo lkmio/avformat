@@ -1,6 +1,7 @@
 package libmpeg
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/lkmio/avformat/libbufio"
 	"math"
@@ -138,7 +139,7 @@ func (r *Muxer) Input(index int, keyFrame bool, data []byte, pts, dts int64) {
 		size := libbufio.MinInt(length, pesPacketSize)
 		n = s.pesPacket.ToBytes(r.buffer[i:])
 
-		libbufio.WriteWORD(r.buffer[i+4:], uint16(size+n-6))
+		binary.BigEndian.PutUint16(r.buffer[i+4:], uint16(size+n-6))
 		i += n
 		copy(r.buffer[i:], data[j*pesPacketSize:j*pesPacketSize+size])
 		i += size

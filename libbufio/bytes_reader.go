@@ -7,7 +7,7 @@ import (
 type BytesReader interface {
 	BytesBuffer
 
-	ReadUint() (uint8, error)
+	ReadUint8() (uint8, error)
 
 	ReadUint16() (uint16, error)
 
@@ -17,13 +17,7 @@ type BytesReader interface {
 
 	ReadUint64() (uint64, error)
 
-	ReadBytes(count int) ([]byte, error)
-}
-
-func NewBytesReader(data []byte) BytesReader {
-	b := &bytesReader{}
-	b.setData(data)
-	return b
+	ReadBytes(size int) ([]byte, error)
 }
 
 // bytesReader 封装切片读操作
@@ -32,7 +26,7 @@ type bytesReader struct {
 	bytesBuffer
 }
 
-func (b *bytesReader) ReadUint() (uint8, error) {
+func (b *bytesReader) ReadUint8() (uint8, error) {
 	if err := b.peekN(1); err != nil {
 		return 0, err
 	}
@@ -53,7 +47,7 @@ func (b *bytesReader) ReadUint24() (uint32, error) {
 		return 0, err
 	}
 
-	return BytesToUInt24(b.data[b.offset-3:]), nil
+	return Uint24(b.data[b.offset-3:]), nil
 }
 
 func (b *bytesReader) ReadUint32() (uint32, error) {
@@ -72,11 +66,17 @@ func (b *bytesReader) ReadUint64() (uint64, error) {
 	return binary.BigEndian.Uint64(b.data[b.offset-8:]), nil
 }
 
-func (b *bytesReader) ReadBytes(count int) ([]byte, error) {
+func (b *bytesReader) ReadBytes(size int) ([]byte, error) {
 	tmp := b.offset
-	if err := b.peekN(count); err != nil {
+	if err := b.peekN(size); err != nil {
 		return nil, err
 	}
 
 	return b.data[tmp:b.offset], nil
+}
+
+func NewBytesReader(data []byte) BytesReader {
+	b := &bytesReader{}
+	b.setData(data)
+	return b
 }

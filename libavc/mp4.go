@@ -53,7 +53,7 @@ func (a *AVCDecoderConfigurationRecord) Marshal(spsList, ppsList [][]byte) ([]by
 		return nil, err
 	}
 
-	if err := writer.WriteUint(byte(len(spsList) & 0x1F)); err != nil {
+	if err := writer.WriteUint8(byte(len(spsList) & 0x1F)); err != nil {
 		return nil, err
 	}
 
@@ -69,7 +69,7 @@ func (a *AVCDecoderConfigurationRecord) Marshal(spsList, ppsList [][]byte) ([]by
 		}
 	}
 
-	if err := writer.WriteUint(byte(len(ppsList))); err != nil {
+	if err := writer.WriteUint8(byte(len(ppsList))); err != nil {
 		return nil, err
 	}
 
@@ -106,7 +106,7 @@ func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 
 	//#define MAX_SPS_COUNT          32
 	//#define MAX_PPS_COUNT         256
-	spsCount, err = reader.ReadUint()
+	spsCount, err = reader.ReadUint8()
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 		a.SPSList = append(a.SPSList, sps)
 	}
 
-	ppsCount, err = reader.ReadUint()
+	ppsCount, err = reader.ReadUint8()
 	if err != nil {
 		return err
 	}

@@ -53,11 +53,11 @@ func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) (int, error) {
 		_ = reader.SeekBack(4)
 		var n int
 		if startCode == 0xBA {
-			n = readPackHeader(d.packetHeader, reader.Data())
+			n = readPackHeader(d.packetHeader, reader.RemainingBytes())
 		} else if startCode == 0xBB {
-			n = readSystemHeader(d.systemHeader, reader.Data())
+			n = readSystemHeader(d.systemHeader, reader.RemainingBytes())
 		} else if startCode == 0xBC {
-			n, _ = readProgramStreamMap(d.programStreamMap, reader.Data())
+			n, _ = readProgramStreamMap(d.programStreamMap, reader.RemainingBytes())
 		} else if StreamIdPrivateStream1 == startCode || StreamIdPaddingStream == startCode || StreamIdPrivateStream2 == startCode {
 			//PrivateStream1解析可参考https://github.com/FFmpeg/FFmpeg/blob/release/7.0/libavformat/mpeg.c#L361
 			//PrivateStream2解析可以参考https://github.com/FFmpeg/FFmpeg/blob/release/7.0/libavformat/mpeg.c#L266
@@ -161,7 +161,7 @@ func (d *PSDeMuxer) Input(data []byte) (int, error) {
 			break
 		}
 
-		n, err = readPESHeader(d.pesHeader, d.reader.Data())
+		n, err = readPESHeader(d.pesHeader, d.reader.RemainingBytes())
 		if err != nil {
 			return d.reader.Offset(), err
 		} else if n < 1 {

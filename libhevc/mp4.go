@@ -94,7 +94,7 @@ func (r *HEVCDecoderConfigurationRecord) Marshal(vpsList, spsList, ppsList [][]b
 
 	write := func(data [][]byte) error {
 		noStartCodeData := libavc.RemoveStartCode(data[0])
-		if err := writer.WriteUint((noStartCodeData[0] >> 1) & 0x3F); err != nil {
+		if err := writer.WriteUint8((noStartCodeData[0] >> 1) & 0x3F); err != nil {
 			return err
 		}
 
@@ -159,7 +159,7 @@ func (r *HEVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 	r.NumOfArrays = data[22]
 
 	for i := 0; i < int(r.NumOfArrays); i++ {
-		readUint, err := reader.ReadUint()
+		readUint, err := reader.ReadUint8()
 		if err != nil {
 			return err
 		}

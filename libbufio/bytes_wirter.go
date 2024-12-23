@@ -7,7 +7,7 @@ import (
 type BytesWriter interface {
 	BytesBuffer
 
-	WriteUint(data byte) error
+	WriteUint8(data byte) error
 
 	WriteUint16(data uint16) error
 
@@ -16,13 +16,16 @@ type BytesWriter interface {
 	WriteUint64(data uint64) error
 
 	Write(data []byte) error
+
+	// WrittenBytes 返回已经写入的切片
+	WrittenBytes() []byte
 }
 
 type bytesWriter struct {
 	bytesBuffer
 }
 
-func (b *bytesWriter) WriteUint(data byte) error {
+func (b *bytesWriter) WriteUint8(data byte) error {
 	if err := b.peekN(1); err != nil {
 		return err
 	}
@@ -65,6 +68,10 @@ func (b *bytesWriter) Write(data []byte) error {
 
 	copy(b.data[b.offset-len(data):], data)
 	return nil
+}
+
+func (b *bytesWriter) WrittenBytes() []byte {
+	return b.data[:b.offset]
 }
 
 func NewBytesWriter(data []byte) BytesWriter {
