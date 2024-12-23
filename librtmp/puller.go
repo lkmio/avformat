@@ -202,22 +202,22 @@ func (p *Puller) sendHandshake() error {
 
 func (p *Puller) connect() {
 	//command message {name,transactionID,object}
-	writer := libflv.NewAMF0Writer()
+	writer := libflv.AMF0{}
 	writer.AddString("connect")
 	writer.AddNumber(float64(TransactionIDConnect)) //transaction ID. Always set to 1. 对应_result中的number
 	object := libflv.AMF0Object{}
 	object.AddStringProperty("app", p.app)
 	object.AddStringProperty("flashVer", "LNX 9,0,124,2")
 	object.AddStringProperty("tcUrl", fmt.Sprintf("%s://%s:%d/%s", p.protocol, p.host, p.port, p.app))
-	object.AddBooleanProperty("fpad", false)
+	object.AddProperty("fpad", libflv.AMF0Boolean(false))
 	object.AddNumberProperty("capabilities", 15)
 	object.AddNumberProperty("audioCodecs", 0x0FFF)   //client supports. 0x0FFF supports all audio codes
 	object.AddNumberProperty("videoCodecs", 0x00FF)   //client supports. 0x00FF supports all video codes
 	object.AddNumberProperty("videoFunction", 0x0001) //Indicates what special video  functions are supported. 0x0001 unused.
-	writer.AddObject(&object)
+	writer.Add(&object)
 
 	bytes := make([]byte, 256)
-	length := writer.ToBytes(bytes)
+	length, _ := writer.Marshal(bytes)
 
 	chunk := Chunk{
 		Type:           ChunkType0,
@@ -247,11 +247,11 @@ func (p *Puller) sendWindowAcknowledgementSize() {
 }
 
 func (p *Puller) createStream() {
-	writer := libflv.NewAMF0Writer()
+	writer := libflv.AMF0{}
 	writer.AddString("createStream")
 	writer.AddNumber(float64(TransactionIDCreateStream)) //transaction ID. Always set to 1. 对应_result中的number
-	writer.AddNull()                                     //
-	length := writer.ToBytes(p.commandBuffer[12:])
+	writer.Add(libflv.AMF0Null{})
+	length, _ := writer.Marshal(p.commandBuffer[12:])
 
 	header := Chunk{
 		Type:           ChunkType0,
@@ -268,18 +268,18 @@ func (p *Puller) createStream() {
 }
 
 func (p *Puller) play(streamId float64) {
-	writer := libflv.NewAMF0Writer()
+	writer := libflv.AMF0{}
 	writer.AddString("play")
 	writer.AddNumber(float64(TransactionIDPlay)) //transaction ID. Always set to 1. 对应_result中的number
-	writer.AddNull()
+	writer.Add(libflv.AMF0Null{})
 	writer.AddString(p.streamName)
 	//start duration reset
-	writer.AddNumber(-2)    //default
-	writer.AddNumber(-1)    //default
-	writer.AddBoolean(true) //flush any previous playlist
+	writer.AddNumber(-2)                 //default
+	writer.AddNumber(-1)                 //default
+	writer.Add(libflv.AMF0Boolean(true)) //flush any previous playlist
 
 	bytes := make([]byte, 256)
-	length := writer.ToBytes(bytes)
+	length, _ := writer.Marshal(bytes)
 
 	chunk := Chunk{
 		Type:           ChunkType0,
@@ -486,7 +486,7 @@ func (p *Puller) processUserControlMessage(event UserControlMessageEvent, value 
 func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int) error {
 	switch typeId {
 	case MessageTypeIDSetChunkSize:
-		p.chunkSize = libbufio.BytesToInt(data)
+		p.chunkSize = int(binary.BigEndian.Uint32(data))
 		break
 	case MessageTypeIDAbortMessage:
 		break
@@ -498,7 +498,7 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 		p.processUserControlMessage(UserControlMessageEvent(event), value)
 		break
 	case MessageTypeIDWindowAcknowledgementSize:
-		p.windowSize = libbufio.BytesToInt(data)
+		p.windowSize = int(binary.BigEndian.Uint32(data))
 		break
 	case MessageTypeIDSetPeerBandWith:
 		p.bandwidth = int(binary.BigEndian.Uint32(data))
@@ -517,26 +517,26 @@ func (p *Puller) processMessage(typeId MessageTypeID, data []byte, timestamp int
 	case MessageTypeIDDataAMF3:
 		break
 	case MessageTypeIDDataAMF0, MessageTypeIDCommandAMF0, MessageTypeIDSharedObjectAMF0:
-		if amf0, err := libflv.DoReadAMF0(data); err != nil {
-			return err
-		} else {
-			l := len(amf0)
-			var command string
-			if l == 0 {
-				return fmt.Errorf("invalid Body")
-			}
-
-			command, _ = amf0[0].(string)
-			if "_result" == command || "_error" == command {
-				transactionId := amf0[1].(float64)
-				if TransactionIDConnect == TransactionID(transactionId) {
-					p.createStream()
-				} else if TransactionIDCreateStream == TransactionID(transactionId) {
-					streamId := amf0[3].(float64)
-					p.play(streamId)
-				}
-			}
-		}
+		//if amf0, err := libflv.DoReadAMF0(data); err != nil {
+		//	return err
+		//} else {
+		//	l := len(amf0)
+		//	var command string
+		//	if l == 0 {
+		//		return fmt.Errorf("invalid Body")
+		//	}
+		//
+		//	command, _ = amf0[0].(string)
+		//	if "_result" == command || "_error" == command {
+		//		transactionId := amf0[1].(float64)
+		//		if TransactionIDConnect == TransactionID(transactionId) {
+		//			p.createStream()
+		//		} else if TransactionIDCreateStream == TransactionID(transactionId) {
+		//			streamId := amf0[3].(float64)
+		//			p.play(streamId)
+		//		}
+		//	}
+		//}
 		break
 	case MessageTypeIDCommandAMF3:
 		break

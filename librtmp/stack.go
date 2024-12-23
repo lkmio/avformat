@@ -71,7 +71,7 @@ type Stack struct {
 	handler          OnEventHandler
 	publisherHandler OnPublishHandler
 
-	metaData map[string]interface{}
+	metaData *libflv.AMF0Object
 
 	audioStreamIndex int
 	videoStreamIndex int
@@ -79,10 +79,9 @@ type Stack struct {
 	videoTimestamp   uint32
 	playStreamId     uint32
 
-	receiveDataSize         uint32
-	receiveDataSizeTotal    uint32
-	acknowledgementDataSize uint32
-	conn                    net.Conn
+	receiveDataSize      uint32
+	totalReceiveDataSize uint32
+	conn                 net.Conn
 }
 
 func (s *Stack) SetOnPublishHandler(handler OnPublishHandler) {
@@ -160,10 +159,10 @@ func (s *Stack) Input(data []byte) error {
 	}
 
 	s.receiveDataSize += uint32(length)
-	s.receiveDataSizeTotal += uint32(length)
+	s.totalReceiveDataSize += uint32(length)
 	if s.receiveDataSize > WindowSize/2 {
 		bytes := [4]byte{}
-		binary.BigEndian.PutUint32(bytes[:], s.receiveDataSizeTotal)
+		binary.BigEndian.PutUint32(bytes[:], s.totalReceiveDataSize)
 		acknowledgement := Chunk{
 			Type:           ChunkType0,
 			ChunkStreamID_: ChunkStreamIdNetwork,
@@ -299,43 +298,43 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 		break
 	case MessageTypeIDDataAMF0:
 		//onMetaData
-		amf0, err := libflv.DoReadAMF0(chunk.Body[:chunk.Size])
-		if err != nil {
+		amf0 := libflv.AMF0{}
+		if err := amf0.Unmarshal(chunk.Body[:chunk.Size]); err != nil {
 			return err
-		} else if len(amf0) < 3 {
-			return nil
+		} else if amf0.Size() < 2 {
+			break
 		}
 
-		if str, ok := amf0[1].(string); ok && "onMetaData" == str {
-			metaData, ok := amf0[2].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("failed to parse the meatadata of rtmp")
-			}
+		element := amf0.Get(1)
+		if libflv.AMF0DataTypeString != element.Type() {
+			break
+		} else if "onMetaData" != string(element.(libflv.AMF0String)) {
+			break
+		}
 
-			s.metaData = metaData
+		if libflv.AMF0DataTypeObject == amf0.Get(2).Type() {
+			s.metaData = amf0.Get(2).(*libflv.AMF0Object)
+		} else if libflv.AMF0DataTypeECMAArray == amf0.Get(2).Type() {
+			s.metaData = amf0.Get(2).(*libflv.AMF0ECMAArray).AMF0Object
 		}
 		break
 	case MessageTypeIDDataAMF3:
 		break
 	case MessageTypeIDCommandAMF0, MessageTypeIDSharedObjectAMF0:
-		amf0, err := libflv.DoReadAMF0(chunk.Body[:chunk.Size])
+		amf0 := libflv.AMF0{}
+		err := amf0.Unmarshal(chunk.Body[:chunk.Size])
 		if err != nil {
 			return err
-		}
-
-		if len(amf0) == 0 {
-			return fmt.Errorf("invaild Body: %s", hex.EncodeToString(chunk.Body[:chunk.Size]))
-		}
-
-		command, ok := amf0[0].(string)
-		if !ok {
+		} else if amf0.Size() < 2 {
+			break
+		} else if libflv.AMF0DataTypeString != amf0.Get(0).Type() {
 			return fmt.Errorf("the first element of amf0 must be of type command: %s", hex.EncodeToString(chunk.Body[:chunk.Size]))
-		}
-
-		transactionId, ok := amf0[1].(float64)
-		if !ok {
+		} else if libflv.AMF0DataTypeNumber != amf0.Get(1).Type() {
 			return fmt.Errorf("the second element of amf0 must be id of transaction: %s", hex.EncodeToString(chunk.Body[:chunk.Size]))
 		}
+
+		command := string(amf0.Get(0).(libflv.AMF0String))
+		transactionId := float64(amf0.Get(1).(libflv.AMF0Number))
 
 		if MessageConnect == command {
 
@@ -419,7 +418,7 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 			}
 
 			var tmp [512]byte
-			writer := libflv.NewAMF0Writer()
+			writer := libflv.AMF0{}
 			writer.AddString(MessageResult)
 			//always equal to 1 for the connect command
 			writer.AddNumber(transactionId)
@@ -436,10 +435,9 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 			information.AddNumberProperty("clientId", 0)
 			information.AddNumberProperty("objectEncoding", 3.0)
 
-			writer.AddObject(properties)
-			writer.AddObject(information)
-			//writer
-			n := writer.ToBytes(tmp[:])
+			writer.Add(properties)
+			writer.Add(information)
+			n, _ := writer.Marshal(tmp[:])
 
 			result := Chunk{
 				Type:           ChunkType0,
@@ -453,19 +451,10 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 				Size: n,
 			}
 
-			for i := 2; i < len(amf0); i++ {
-				obj, ok := amf0[i].(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				app, ok := obj["app"]
-				if !ok {
-					continue
-				}
-
-				if str, ok := app.(string); ok {
-					s.app = str
+			if amf0.Size() > 2 && libflv.AMF0DataTypeObject == amf0.Get(2).Type() {
+				object := amf0.Get(2).(*libflv.AMF0Object)
+				if property := object.FindProperty("app"); property != nil && libflv.AMF0DataTypeString == property.Value.Type() {
+					s.app = string(property.Value.(libflv.AMF0String))
 				}
 			}
 
@@ -495,14 +484,14 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 			//	| ID           |          | or an error information object.        |
 			//	+--------------+----------+----------------------------------------+
 
-			writer := libflv.NewAMF0Writer()
+			writer := libflv.AMF0{}
 			writer.AddString(MessageResult)
 			writer.AddNumber(transactionId)
-			writer.AddNull()
+			writer.Add(libflv.AMF0Null{})
 			writer.AddNumber(1) // 应答0, 某些推流端可能会失败
 
 			var tmp [128]byte
-			n := writer.ToBytes(tmp[:])
+			n, _ := writer.Marshal(tmp[:])
 
 			response := Chunk{
 				Type:           ChunkType0,
@@ -518,11 +507,40 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 
 			return s.SendChunks(response)
 		} else if MessagePublish == command {
+
+			//  The command structure from the client to the server is as follows:
+			// +--------------+----------+----------------------------------------+
+			// | Field Name   |   Type   |             Description                |
+			// 	+--------------+----------+----------------------------------------+
+			// | Command Name |  String  | Name of the command, set to "publish". |
+			// +--------------+----------+----------------------------------------+
+			// | Transaction  |  Number  | Transaction ID set to 0.               |
+			// | ID           |          |                                        |
+			// +--------------+----------+----------------------------------------+
+			// | Command      |  Null    | Command information object does not    |
+			// | Object       |          | exist. Set to null type.               |
+			// +--------------+----------+----------------------------------------+
+			// | Publishing   |  String  | Name with which the stream is          |
+			// | Name         |          | published.                             |
+			// +--------------+----------+----------------------------------------+
+			// | Publishing   |  String  | Type of publishing. Set to "live",     |
+			// | Type         |          | "record", or "append".                 |
+			// |              |          | record: The stream is published and the|
+			// |              |          | data is recorded to a new file.The file|
+			// |              |          | is stored on the server in a           |
+			// |              |          | subdirectory within the directory that |
+			// |              |          | contains the server application. If the|
+			// |              |          | file already exists, it is overwritten.|
+			// |              |          | append: The stream is published and the|
+			// |              |          | data is appended to a file. If no file |
+			// |              |          | is found, it is created.               |
+			// |              |          | live: Live data is published without   |
+			// |              |          | recording it in a file.                |
+			// +--------------+----------+----------------------------------------+
 			// stream
-			for i := 2; i < len(amf0); i++ {
-				if str, ok := amf0[i].(string); ok {
-					s.stream = str
-					break
+			if amf0.Size() > 3 {
+				if stream, ok := amf0.Get(3).(libflv.AMF0String); ok {
+					s.stream = string(stream)
 				}
 			}
 
@@ -536,11 +554,85 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 				s.conn.Close()
 			}
 		} else if MessagePlay == command {
-			for i := 2; i < len(amf0); i++ {
-				str, ok := amf0[i].(string)
-				if ok {
-					s.stream = str
-					break
+
+			// The command structure from the client to the server is as follows:
+			// +--------------+----------+-----------------------------------------+
+			// | Field Name   |   Type   |             Description                 |
+			// 	+--------------+----------+-----------------------------------------+
+			// | Command Name |  String  | Name of the command. Set to "play".     |
+			// +--------------+----------+-----------------------------------------+
+			// | Transaction  |  Number  | Transaction ID set to 0.                |
+			// | ID           |          |                                         |
+			// +--------------+----------+-----------------------------------------+
+			// | Command      |   Null   | Command information does not exist.     |
+			// | Object       |          | Set to null type.                       |
+			// +--------------+----------+-----------------------------------------+
+			// | Stream Name  |  String  | Name of the stream to play.             |
+			// |              |          | To play video (FLV) files, specify the  |
+			// |              |          | name of the stream without a file       |
+			// |              |          | extension (for example, "sample"). To   |
+			// |              |          | play back MP3 or ID3 tags, you must     |
+			// |              |          | precede the stream name with mp3:       |
+			// |              |          | (for example, "mp3:sample". To play     |
+			// |              |          | H.264/AAC files, you must precede the   |
+			// |              |          | stream name with mp4: and specify the   |
+			// |              |          | file extension. For example, to play the|
+			// |              |          | file sample.m4v,specify "mp4:sample.m4v"|
+			// |              |          |                                         |
+			// +--------------+----------+-----------------------------------------+
+			// | Start        |  Number  | An optional parameter that specifies    |
+			// |              |          | the start time in seconds. The default  |
+			// |              |          | value is -2, which means the subscriber |
+			// |              |          | first tries to play the live stream     |
+			// |              |          | specified in the Stream Name field. If a|
+			// |              |          | live stream of that name is not found,it|
+			// |              |          | plays the recorded stream of the same   |
+			// |              |          | name. If there is no recorded stream    |
+			// |              |          | with that name, the subscriber waits for|
+			// |              |          | a new live stream with that name and    |
+			// |              |          | plays it when available. If you pass -1 |
+			// |              |          | in the Start field, only the live stream|
+			// |              |          | specified in the Stream Name field is   |
+			// |              |          | played. If you pass 0 or a positive     |
+			// |              |          | number in the Start field, a recorded   |
+			// |              |          | stream specified in the Stream Name     |
+			// |              |          | field is played beginning from the time |
+			// |              |          | specified in the Start field. If no     |
+			// |              |          | recorded stream is found, the next item |
+			// |              |          | in the playlist is played.              |
+			// +--------------+----------+-----------------------------------------+
+			// | Duration     |  Number  | An optional parameter that specifies the|
+			// |              |          | duration of playback in seconds. The    |
+			// |              |          | default value is -1. The -1 value means |
+			// |              |          | a live stream is played until it is no  |
+			// |              |          | longer available or a recorded stream is|
+			// |              |          | played until it ends. If you pass 0, it |
+			// |              |          | plays the single frame since the time   |
+			// |              |          | specified in the Start field from the   |
+			// |              |          | beginning of a recorded stream. It is   |
+			// |              |          | assumed that the value specified in     |
+			// |              |          | the Start field is equal to or greater  |
+			// |              |          | than 0. If you pass a positive number,  |
+			// |              |          | it plays a live stream for              |
+			// |              |          | the time period specified in the        |
+			// |              |          | Duration field. After that it becomes   |
+			// |              |          | available or plays a recorded stream    |
+			// |              |          | for the time specified in the Duration  |
+			// |              |          | field. (If a stream ends before the     |
+			// |              |          | time specified in the Duration field,   |
+			// |              |          | playback ends when the stream ends.)    |
+			// |              |          | If you pass a negative number other     |
+			// |              |          | than -1 in the Duration field, it       |
+			// |              |          | interprets the value as if it were -1.  |
+			// +--------------+----------+-----------------------------------------+
+			// | Reset        | Boolean  | An optional Boolean value or number     |
+			// |              |          | that specifies whether to flush any     |
+			// |              |          | previous playlist.                      |
+			// +--------------+----------+-----------------------------------------+
+
+			if amf0.Size() > 3 {
+				if stream, ok := amf0.Get(3).(libflv.AMF0String); ok {
+					s.stream = string(stream)
 				}
 			}
 
@@ -575,20 +667,20 @@ func (s *Stack) ProcessMessage(chunk *Chunk) error {
 
 func (s *Stack) sendStatus(transactionId float64, level, code, description string) error {
 
-	amf0Writer := libflv.NewAMF0Writer()
+	amf0Writer := libflv.AMF0{}
 	amf0Writer.AddString(MessageOnStatus)
 	amf0Writer.AddNumber(transactionId)
-	amf0Writer.AddNull()
+	amf0Writer.Add(libflv.AMF0Null{})
 
 	object := &libflv.AMF0Object{}
 	object.AddStringProperty("level", level)
 	object.AddStringProperty("code", code)
 	object.AddStringProperty("description", description)
 
-	amf0Writer.AddObject(object)
+	amf0Writer.Add(object)
 
 	var tmp [128]byte
-	n := amf0Writer.ToBytes(tmp[:])
+	n, _ := amf0Writer.Marshal(tmp[:])
 
 	response := Chunk{
 		Type:           ChunkType0,
@@ -611,14 +703,14 @@ func (s *Stack) Close() {
 	s.conn = nil
 }
 
-func (s *Stack) MetaData() map[string]interface{} {
+func (s *Stack) MetaData() *libflv.AMF0Object {
 	return s.metaData
 }
 
 func (s *Stack) SendStreamBeginChunk() error {
 	bytes := make([]byte, 6)
 	binary.BigEndian.PutUint16(bytes, 0)
-	binary.BigEndian.PutUint32(bytes[2:], s.playStreamId)
+	binary.BigEndian.PutUint32(bytes[2:], 1)
 
 	streamBegin := Chunk{
 		Type:           ChunkType0,
@@ -637,7 +729,7 @@ func (s *Stack) SendStreamBeginChunk() error {
 func (s *Stack) SendStreamEOFChunk() error {
 	bytes := make([]byte, 6)
 	binary.BigEndian.PutUint16(bytes, 1)
-	binary.BigEndian.PutUint32(bytes[2:], s.playStreamId)
+	binary.BigEndian.PutUint32(bytes[2:], 1)
 
 	streamEof := Chunk{
 		Type:           ChunkType0,

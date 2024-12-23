@@ -124,8 +124,7 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 		case ParserStateStreamId:
 			for ; p.headerOffset < 4 && i < length; i++ {
-				p.header.StreamID <<= 8
-				p.header.StreamID |= uint32(data[i])
+				p.header.StreamID |= uint32(data[i]) << (8 * p.headerOffset)
 				p.headerOffset++
 			}
 
@@ -149,7 +148,6 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 			if p.headerOffset == 4 {
 				p.headerOffset = 0
-
 				p.state = ParserStatePayload
 			}
 			break
@@ -238,7 +236,6 @@ func (p *Parser) ReadChunk(data []byte) (*Chunk, int, error) {
 
 			chunk.Size += consume
 			i += consume
-
 			if chunk.Size >= chunk.Length {
 				p.state = ParserStateInit
 				return chunk, i, nil
