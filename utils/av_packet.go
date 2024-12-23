@@ -50,6 +50,8 @@ type AVPacket interface {
 	Duration(timebase int) int64
 
 	CreatedTime() int64
+
+	Timebase() int
 }
 
 type avPacket struct {
@@ -196,4 +198,8 @@ func (pkt *avPacket) SetDts(dts int64) {
 
 func (pkt *avPacket) CreatedTime() int64 {
 	return pkt.createdTime
+}
+
+func (pkt *avPacket) Timebase() int {
+	return pkt.timebase
 }
