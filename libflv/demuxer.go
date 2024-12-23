@@ -82,24 +82,10 @@ type DeMuxer interface {
 type deMuxer struct {
 	stream.DeMuxerImpl
 
-	/**
-	duration: DOUBLE
-	width: DOUBLE
-	height: DOUBLE
-	videodatarate: DOUBLE
-	framerate: DOUBLE
-	videocodecid: DOUBLE
-	audiosamplerate: DOUBLE
-	audiosamplesize: DOUBLE
-	stereo: BOOL
-	audiocodecid: DOUBLE
-	filesize: DOUBLE
-	*/
-	metaData []interface{}
+	metaData        *AMF0 // 元数据
+	headerProcessed bool  // 是否已经读取到9字节的FLV头
+	tag             Tag   // 保存当前正在读取的Tag
 
-	headerProcessed bool //是否已经读取到9字节的FLV头
-
-	tag         Tag //保存当前正在读取的Tag
 	audioIndex  int
 	videoIndex  int
 	audioTs     int64
@@ -119,24 +105,13 @@ type Tag struct {
 }
 
 func (d *deMuxer) readScriptDataObject(data []byte) error {
-	buffer := libbufio.NewByteBuffer(data)
-
-	if err := buffer.PeekCount(1); err != nil {
-		return err
-	}
-
-	metaData, err := DoReadAMF0FromBuffer(buffer)
+	amf0 := &AMF0{}
+	err := amf0.Unmarshal(data)
 	if err != nil {
 		return err
 	}
-	if len(metaData) <= 0 {
-		return fmt.Errorf("invalid data")
-	}
-	if s, ok := metaData[0].(string); s == "" || !ok {
-		return fmt.Errorf("not find the ONMETADATA of AMF0")
-	}
 
-	d.metaData = metaData
+	d.metaData = amf0
 	return nil
 }
 
@@ -170,10 +145,10 @@ func (d *deMuxer) readHeader(data []byte) error {
 // uint32 timestamp
 func (d *deMuxer) readTag(data []byte) Tag {
 	_ = data[TagHeaderSize]
-	timestamp := libbufio.BytesToUInt24(data[8:])
+	timestamp := libbufio.Uint24(data[8:])
 	timestamp |= uint32(data[11]) << 24
 
-	return Tag{preSize: binary.BigEndian.Uint32(data), type_: TagType(data[4]), dataSize: int(libbufio.BytesToUInt24(data[5:])), timestamp: timestamp}
+	return Tag{preSize: binary.BigEndian.Uint32(data), type_: TagType(data[4]), dataSize: int(libbufio.Uint24(data[5:])), timestamp: timestamp}
 }
 
 func (d *deMuxer) parseTag(data []byte, tagType TagType, ts uint32) error {
@@ -208,7 +183,7 @@ func (d *deMuxer) Input(data []byte) (int, error) {
 		n = 9
 	}
 
-	//读取未解析完的Tag
+	// 读取未解析完的Tag
 	need := d.tag.dataSize - d.tag.size
 	if need > 0 {
 		min := libbufio.MinInt(len(data), need)
@@ -274,7 +249,7 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 	}
 
 	if sequenceHeader {
-		if d.audioStream != nil {
+		if d.videoStream != nil {
 			return nil
 		}
 
@@ -316,8 +291,8 @@ func (d *deMuxer) InputVideo(data []byte, ts uint32) error {
 		duration = int64(ts) - d.videoTs
 	}
 
-	//时间戳溢出
-	//ts是累加的, 除了溢出, 不会存在时间戳比前一个帧小的情况
+	// 时间戳溢出
+	// ts是累加的, 除了溢出, 不会存在时间戳比前一个帧小的情况
 	if d.videoTs != -1 && int64(ts) < d.videoTs {
 		duration = 0xFFFFFFFF - d.videoTs + int64(ts)
 	}
@@ -349,7 +324,12 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 		if utils.AVCodecIdAAC == codecId && sequenceHeader {
 			extraData := make([]byte, len(data[n:]))
 			copy(extraData, data[n:])
-			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, extraData, nil)
+			config, err := utils.ParseMpeg4AudioConfig(extraData)
+			if err != nil {
+				return err
+			}
+
+			audioStream = utils.NewAudioStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, extraData, config.SampleRate, config.Channels)
 			n = len(data)
 		} else {
 			audioStream = utils.NewAVStream(utils.AVMediaTypeAudio, d.audioIndex, codecId, nil, nil)
@@ -373,16 +353,24 @@ func (d *deMuxer) InputAudio(data []byte, ts uint32) error {
 		duration = int64(ts) - d.audioTs
 	}
 
-	//时间戳溢出
+	// 时间戳溢出
 	if d.audioTs != -1 && int64(ts) < d.audioTs {
 		duration = 0xFFFFFFFF - d.audioTs + int64(ts)
+	}
+
+	// 根据采样率计算出帧长
+	if duration == 0 {
+		if utils.AVCodecIdAAC == d.audioStream.CodecId() {
+			duration = int64(utils.ComputeAACFrameDuration(d.audioStream.(*utils.AudioStream).SampleRate))
+		} else if utils.AVCodecIdPCMALAW == d.audioStream.CodecId() || utils.AVCodecIdPCMMULAW == d.audioStream.CodecId() {
+			duration = int64(len(data[n:]))
+		}
 	}
 
 	d.audioTs = int64(ts)
 	packet := utils.NewAudioPacket(data[n:], d.audioTs, d.audioTs, codecId, d.audioIndex, 1000)
 	packet.SetDuration(duration)
 	d.Handler.OnDeMuxPacket(packet)
-
 	return nil
 }
 
@@ -440,12 +428,12 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 
 	if byte(VideoCodeIdH264) == codeId {
 		pktType := data[1]
-		ct := libbufio.BytesToUInt24(data[2:])
+		ct := libbufio.Uint24(data[2:])
 
 		return 5, pktType == 0, frameType == 1, utils.AVCodecIdH264, int(ct), nil
 	} else if byte(VideoCodeIdH263) == codeId {
 		//pktType := data[1]
-		//ct := utils.BytesToUInt24(data[2], data[3], data[4])
+		//ct := utils.Uint24(data[2], data[3], data[4])
 		pktType := 1
 		ct := 0
 		return 0, pktType == 0, frameType == 1, utils.AVCodecIdH263, int(ct), nil
@@ -467,13 +455,14 @@ func ParseVideoData(data []byte) (int, bool, bool, utils.AVCodecID, int, error) 
 			if PacketTypeSequenceStart == pktType {
 			} else if PacketTypeCodedFrames == pktType || PacketTypeCodedFramesX == pktType {
 				if PacketTypeCodedFrames == pktType {
-					ct = int(libbufio.BytesToUInt24(data[5:]))
+					ct = int(libbufio.Uint24(data[5:]))
 					n += 3
 				}
 			} else if PacketTypeMetaData == pktType {
-				if _, err := DoReadAMF0(data[5:]); err != nil {
-					return 0, false, false, 0, 0, err
-				}
+
+				//if _, err := DoReadAMF0(data[5:]); err != nil {
+				//	return 0, false, false, 0, 0, err
+				//}
 
 				return 0, false, false, utils.AVCodecIdNONE, 0, nil
 			} else if PacketTypeSequenceEnd == pktType {

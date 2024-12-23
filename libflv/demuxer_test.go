@@ -39,7 +39,7 @@ func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
 		var videoStream utils.AVStream
 		var audioCodecId utils.AVCodecID
 		var videoCodecId utils.AVCodecID
-		h.muxer = NewMuxer()
+		h.muxer = NewMuxer(nil)
 		for _, stream := range h.streams {
 			if utils.AVMediaTypeAudio == stream.Type() {
 				audioStream = stream
@@ -52,10 +52,10 @@ func (h *Handler) OnDeMuxPacket(packet utils.AVPacket) {
 
 				h.muxer.AddVideoTrack(videoCodecId)
 
-				width := int(videoStream.CodecParameters().SPSInfo().Width())
-				height := int(videoStream.CodecParameters().SPSInfo().Height())
-				h.muxer.AddProperty("width", width)
-				h.muxer.AddProperty("height", height)
+				width := videoStream.CodecParameters().Width()
+				height := videoStream.CodecParameters().Height()
+				h.muxer.MetaData().AddNumberProperty("width", float64(width))
+				h.muxer.MetaData().AddNumberProperty("height", float64(height))
 			}
 		}
 
@@ -98,6 +98,11 @@ func TestDeMuxer(t *testing.T) {
 	args := os.Args
 	path := args[len(args)-1]
 
+	data, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+
 	h264File, err := os.OpenFile(path+".h264", os.O_WRONLY|os.O_CREATE, 132)
 	if err != nil {
 		panic(err)
@@ -125,17 +130,12 @@ func TestDeMuxer(t *testing.T) {
 		outfile.Close()
 	}()
 
-	muxer := NewDeMuxer(TSModeAbsolute)
+	muxer := NewDeMuxer()
 	handler := &Handler{first: true, out: outfile, audioOut: aacFile, videoOut: h264File}
 	muxer.SetHandler(handler)
 
-	open, err := os.Open(path)
-	if err != nil {
-		panic(err)
-	}
-
 	bytes := make([]byte, 1024*1024*2)
-	reader := bufio.NewReader(open)
+	reader := bufio.NewReader(data)
 	var size int
 	var n int
 

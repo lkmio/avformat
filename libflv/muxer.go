@@ -2,7 +2,6 @@ package libflv
 
 import (
 	"encoding/binary"
-	"fmt"
 	"github.com/lkmio/avformat/libbufio"
 	"github.com/lkmio/avformat/utils"
 	"time"
@@ -25,8 +24,7 @@ type Muxer interface {
 
 	ComputeVideoDataSize(ct uint32) int
 
-	// AddProperty 添加元数据
-	AddProperty(name string, value interface{}) error
+	MetaData() *AMF0Object
 }
 
 type muxer struct {
@@ -36,21 +34,11 @@ type muxer struct {
 	videoCodecId VideoCodecId
 	soundFormat  SoundFormat
 	soundRate    SoundRate
-	soundType    byte //0-mono/1-stereo. for Nellymoser always:0, For AAC always:1
-	soundSize    byte //0-8位深/1-16位深
+	soundType    byte // 0-mono/1-stereo. for Nellymoser always:0, For AAC always:1
+	soundSize    byte // 0-8位深/1-16位深
 	preSize      uint32
 
 	metaData *AMF0Object
-}
-
-func NewMuxer() Muxer {
-	m := &muxer{
-		soundSize: 1,
-		metaData:  &AMF0Object{},
-	}
-
-	m.metaData.AddStringProperty("creationtime", time.Now().Format("2006-01-02 15:04:05"))
-	return m
 }
 
 func (m *muxer) AddVideoTrack(id utils.AVCodecID) {
@@ -63,7 +51,9 @@ func (m *muxer) AddVideoTrack(id utils.AVCodecID) {
 	}
 
 	m.existVideo = true
-	m.metaData.AddNumberProperty("videocodecid", float64(m.videoCodecId))
+	if m.metaData.FindProperty("videocodecid") == nil {
+		m.metaData.AddNumberProperty("videocodecid", float64(m.videoCodecId))
+	}
 }
 
 func (m *muxer) AddAudioTrack(id utils.AVCodecID, soundRate, soundType, soundSize int) {
@@ -90,8 +80,13 @@ func (m *muxer) AddAudioTrack(id utils.AVCodecID, soundRate, soundType, soundSiz
 	}
 
 	m.existAudio = true
-	m.metaData.AddNumberProperty("audiocodecid", float64(m.soundFormat))
-	m.metaData.AddNumberProperty("audiosamplerate", float64(m.soundRate))
+	if m.metaData.FindProperty("audiocodecid") == nil {
+		m.metaData.AddNumberProperty("audiocodecid", float64(m.soundFormat))
+	}
+
+	if m.metaData.FindProperty("audiosamplerate") == nil {
+		m.metaData.AddNumberProperty("audiosamplerate", float64(m.soundRate))
+	}
 }
 
 func (m *muxer) WriteHeader(data []byte) int {
@@ -113,12 +108,12 @@ func (m *muxer) WriteHeader(data []byte) int {
 	data[4] = flags
 
 	binary.BigEndian.PutUint32(data[5:], 0x9)
-	amf0 := NewAMF0Writer()
+	amf0 := AMF0{}
 	amf0.AddString("onMetaData")
-	amf0.AddObject(m.metaData)
-	//先写metadata
-	n := amf0.ToBytes(data[9+TagHeaderSize:])
-	//再写tag
+	amf0.Add(m.metaData)
+	// 先写metadata
+	n, _ := amf0.Marshal(data[9+TagHeaderSize:])
+	// 再写tag
 	m.writeTag(data[9:], TagTypeScriptDataObject, uint32(n), 0)
 	return 9 + TagHeaderSize + n
 }
@@ -142,10 +137,10 @@ func (m *muxer) Input(dst []byte, mediaType utils.AVMediaType, pktSize int, dts,
 func (m *muxer) writeTag(dst []byte, tag TagType, dataSize, timestamp uint32) int {
 	binary.BigEndian.PutUint32(dst, m.preSize)
 	dst[4] = byte(tag)
-	libbufio.WriteUInt24(dst[5:], dataSize)
-	libbufio.WriteUInt24(dst[8:], timestamp&0xFFFFFF)
+	libbufio.PutUint24(dst[5:], dataSize)
+	libbufio.PutUint24(dst[8:], timestamp&0xFFFFFF)
 	dst[11] = byte(timestamp >> 24)
-	libbufio.WriteUInt24(dst[12:], 0)
+	libbufio.PutUint24(dst[12:], 0)
 
 	m.preSize = 11 + dataSize
 	return TagHeaderSize
@@ -224,25 +219,30 @@ func (m *muxer) WriteVideoData(dst []byte, ct uint32, key, header bool) int {
 	dst[0] = frameType<<4 | codecId
 
 	if setCt {
-		libbufio.WriteUInt24(dst[n:], ct)
+		libbufio.PutUint24(dst[n:], ct)
 		n += 3
 	}
 
 	return n
 }
 
-func (m *muxer) AddProperty(name string, value interface{}) error {
-	if s, ok := value.(string); ok {
-		m.metaData.AddStringProperty(name, s)
-	} else if s, ok := value.(float64); ok {
-		m.metaData.AddNumberProperty(name, s)
-	} else if s, ok := value.(int); ok {
-		m.metaData.AddNumberProperty(name, float64(s))
-	} else if s, ok := value.(uint); ok {
-		m.metaData.AddNumberProperty(name, float64(s))
-	} else {
-		return fmt.Errorf("unknow property %v", value)
+func (m *muxer) MetaData() *AMF0Object {
+	return m.metaData
+}
+
+func NewMuxer(metaData *AMF0Object) Muxer {
+	if metaData == nil {
+		metaData = &AMF0Object{}
 	}
 
-	return nil
+	m := &muxer{
+		soundSize: 1,
+		metaData:  metaData,
+	}
+
+	if metaData.FindProperty("creationtime") == nil {
+		m.metaData.AddStringProperty("creationtime", time.Now().Format("2006-01-02 15:04:05"))
+	}
+
+	return m
 }

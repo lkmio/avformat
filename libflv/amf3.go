@@ -8,21 +8,21 @@ import (
 )
 
 const (
-	AMF3DataTypeUndefined   = dataType(0x00)
-	AMF3DataTypeNULL        = dataType(0x01)
-	AMF3DataTypeFalse       = dataType(0x02)
-	AMF3DataTypeTrue        = dataType(0x03)
-	AMF3DataTypeInteger     = dataType(0x04)
-	AMF3DataTypeDouble      = dataType(0x05)
-	AMF3DataTypeString      = dataType(0x06)
-	AMF3DataTypeXMLDocument = dataType(0x07)
-	AMF3DataTypeDate        = dataType(0x08)
-	AMF3DataTypeArray       = dataType(0x09)
-	AMF3DataTypeObject      = dataType(0x0A)
-	AMF3DataTypeXML         = dataType(0x0B)
-	AMF3DataTypeByteArray   = dataType(0x0C)
-	AMF3DataTypeVector      = dataType(0x0D)
-	AMF3DataTypeDictionary  = dataType(0x0E)
+	AMF3DataTypeUndefined   = DataType(0x00)
+	AMF3DataTypeNULL        = DataType(0x01)
+	AMF3DataTypeFalse       = DataType(0x02)
+	AMF3DataTypeTrue        = DataType(0x03)
+	AMF3DataTypeInteger     = DataType(0x04)
+	AMF3DataTypeDouble      = DataType(0x05)
+	AMF3DataTypeString      = DataType(0x06)
+	AMF3DataTypeXMLDocument = DataType(0x07)
+	AMF3DataTypeDate        = DataType(0x08)
+	AMF3DataTypeArray       = DataType(0x09)
+	AMF3DataTypeObject      = DataType(0x0A)
+	AMF3DataTypeXML         = DataType(0x0B)
+	AMF3DataTypeByteArray   = DataType(0x0C)
+	AMF3DataTypeVector      = DataType(0x0D)
+	AMF3DataTypeDictionary  = DataType(0x0E)
 )
 
 type AMF3Reader struct {
@@ -30,13 +30,14 @@ type AMF3Reader struct {
 	objRefTable []string
 }
 
-func (d *AMF3Reader) readU29(buffer libbufio.ByteBuffer) (int, bool, error) {
+func (d *AMF3Reader) readU29(buffer libbufio.BytesReader) (int, bool, error) {
 	var integer int
 	for i := 0; i < 4; i++ {
-		if err := buffer.PeekCount(1); err != nil {
+		uInt8, err := buffer.ReadUint8()
+		if err != nil {
 			return 0, false, err
 		}
-		uInt8 := buffer.ReadUInt8()
+
 		integer <<= i * 7
 		if i == 3 {
 			integer <<= 1
@@ -67,7 +68,7 @@ func (d *AMF3Reader) findObject(index int) (string, error) {
 	return d.objRefTable[index], nil
 }
 
-func (d *AMF3Reader) ReadObjectFromTable(buffer libbufio.ByteBuffer) (string, int, bool, error) {
+func (d *AMF3Reader) ReadObjectFromTable(buffer libbufio.BytesReader) (string, int, bool, error) {
 	u29, ref, err := d.readU29(buffer)
 	if err != nil {
 		return "", -1, false, err
@@ -82,7 +83,7 @@ func (d *AMF3Reader) ReadObjectFromTable(buffer libbufio.ByteBuffer) (string, in
 	return "", u29, false, err
 }
 
-func (d *AMF3Reader) readRef(buffer libbufio.ByteBuffer, readCache func(int) (string, error)) (string, error) {
+func (d *AMF3Reader) readRef(buffer libbufio.BytesReader, readCache func(int) (string, error)) (string, error) {
 	u29, ref, err := d.readU29(buffer)
 	if err != nil {
 		return "", err
@@ -97,14 +98,14 @@ func (d *AMF3Reader) readRef(buffer libbufio.ByteBuffer, readCache func(int) (st
 
 	u29 >>= 1
 	dst := make([]byte, u29)
-	if readBytes := buffer.ReadBytes(dst); readBytes != u29 {
-		dst = dst[:u29]
-	}
+	//if readBytes := buffer.ReadBytes(dst); readBytes != u29 {
+	//	dst = dst[:u29]
+	//}
 
 	return string(dst), err
 }
 
-func (d *AMF3Reader) ReadAMF3String(buffer libbufio.ByteBuffer) (string, error) {
+func (d *AMF3Reader) ReadAMF3String(buffer libbufio.BytesReader) (string, error) {
 	str, err := d.readRef(buffer, d.findString)
 	if err != nil {
 		d.strRefTable = append(d.strRefTable, str)
@@ -112,7 +113,7 @@ func (d *AMF3Reader) ReadAMF3String(buffer libbufio.ByteBuffer) (string, error) 
 	return str, err
 }
 
-func (d *AMF3Reader) ReadAMF3Object(buffer libbufio.ByteBuffer) (string, error) {
+func (d *AMF3Reader) ReadAMF3Object(buffer libbufio.BytesReader) (string, error) {
 	str, err := d.readRef(buffer, d.findObject)
 	if err != nil {
 		d.objRefTable = append(d.objRefTable, str)
@@ -120,13 +121,13 @@ func (d *AMF3Reader) ReadAMF3Object(buffer libbufio.ByteBuffer) (string, error) 
 	return str, err
 }
 
-func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.ByteBuffer) (interface{}, error) {
-	if err := buffer.PeekCount(1); err != nil {
+func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.BytesReader) (interface{}, error) {
+	mark, err := buffer.ReadUint8()
+	if err != nil {
 		return nil, err
 	}
 
-	t := buffer.ReadUInt8()
-	switch dataType(t) {
+	switch DataType(mark) {
 	case AMF3DataTypeUndefined:
 		return "undefined", nil
 	case AMF3DataTypeNULL:
@@ -142,10 +143,12 @@ func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.ByteBuffer) (interface{}
 			return u29, nil
 		}
 	case AMF3DataTypeDouble:
-		if err := buffer.PeekCount(8); err != nil {
+		value, err := buffer.ReadUint64()
+		if err != nil {
 			return nil, err
 		}
-		return math.Float64frombits(buffer.ReadUInt64()), nil
+
+		return math.Float64frombits(value), nil
 	case AMF3DataTypeString:
 		ref, err := d.ReadAMF3String(buffer)
 		if err != nil {
@@ -168,11 +171,12 @@ func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.ByteBuffer) (interface{}
 			return object, nil
 		}
 
-		if err = buffer.PeekCount(8); err != nil {
+		f64, err := buffer.ReadUint64()
+		if err != nil {
 			return nil, err
 		}
-		f64 := math.Float64frombits(buffer.ReadUInt64())
-		dateTime := time.Unix(int64(f64/1000), 0).UTC().String()
+
+		dateTime := time.Unix(int64(math.Float64frombits(f64)/1000), 0).UTC().String()
 		d.strRefTable = append(d.objRefTable, dateTime)
 		return dateTime, nil
 	case AMF3DataTypeArray, AMF3DataTypeObject:
@@ -203,14 +207,14 @@ func (d *AMF3Reader) ReadAMF3FromBuffer(buffer libbufio.ByteBuffer) (interface{}
 	return nil, nil
 }
 
-func (d *AMF3Reader) DoReadAMF3(buffer libbufio.ByteBuffer, dst map[string]interface{}) error {
+func (d *AMF3Reader) DoReadAMF3(buffer libbufio.BytesReader, dst map[string]interface{}) error {
 	key, err := d.ReadAMF3String(buffer)
 	if err != nil {
 		return err
 	}
 
 	for buffer.ReadableBytes() > 3 {
-		value, err := ReadAMF0(buffer)
+		value, err := ReadAMF0Element(buffer)
 		if err != nil {
 			return err
 		}
