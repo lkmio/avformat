@@ -22,10 +22,6 @@ type AVStream interface {
 	CodecParameters() CodecData
 }
 
-func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, config CodecData) AVStream {
-	return &avStream{type_: type_, index: index, codecId: codecId, data: extra, codecParameters: config}
-}
-
 type avStream struct {
 	type_ AVMediaType
 
@@ -60,4 +56,19 @@ func (a *avStream) SetExtraData(data []byte) {
 
 func (a *avStream) CodecParameters() CodecData {
 	return a.codecParameters
+}
+
+type AudioStream struct {
+	avStream
+
+	SampleRate int
+	Channels   int
+}
+
+func NewAVStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, config CodecData) AVStream {
+	return &avStream{type_: type_, index: index, codecId: codecId, data: extra, codecParameters: config}
+}
+
+func NewAudioStream(type_ AVMediaType, index int, codecId AVCodecID, extra []byte, sampleRate, channels int) AVStream {
+	return &AudioStream{avStream: avStream{type_: type_, index: index, codecId: codecId, data: extra}, SampleRate: sampleRate, Channels: channels}
 }
