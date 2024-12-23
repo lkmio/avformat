@@ -54,6 +54,8 @@ const (
 	AotSaoc       = AudioObjectType(43) ///< N                       Spatial Audio Object Coding
 	AotLdSurround = AudioObjectType(44) ///< N                       Low Delay MPEG Surround
 	AotUsac       = AudioObjectType(45) ///< N                       Unified Speech and Audio Coding
+
+	DefaultAACFrameLength = 1024
 )
 
 var (
@@ -221,7 +223,7 @@ func ReadADtsFixedHeader(data []byte) (ADtsHeader, error) {
 	}
 
 	var header uint64
-	header = uint64(libbufio.BytesToUInt24(data)) << 32
+	header = uint64(libbufio.Uint24(data)) << 32
 	header |= uint64(binary.BigEndian.Uint32(data[3:]))
 
 	if ADtsHeader(header).ProtectionAbsent() == 0 {
@@ -262,4 +264,8 @@ func ParseMpeg4AudioConfig(data []byte) (*MPEG4AudioConfig, error) {
 	//config.sbr = -1
 	//config.ps = -1
 	//if config.ObjectType == AotSbr || (config.ObjectType == AotPs && )
+}
+
+func ComputeAACFrameDuration(sampleRate int) float32 {
+	return float32(sampleRate) / float32(DefaultAACFrameLength)
 }
