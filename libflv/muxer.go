@@ -25,6 +25,8 @@ type Muxer interface {
 	ComputeVideoDataSize(ct uint32) int
 
 	MetaData() *AMF0Object
+
+	PrevTagSize() uint32
 }
 
 type muxer struct {
@@ -230,7 +232,15 @@ func (m *muxer) MetaData() *AMF0Object {
 	return m.metaData
 }
 
+func (m *muxer) PrevTagSize() uint32 {
+	return m.preSize
+}
+
 func NewMuxer(metaData *AMF0Object) Muxer {
+	return NewMuxerWithPrevTagSize(metaData, 0)
+}
+
+func NewMuxerWithPrevTagSize(metaData *AMF0Object, prevTagSize uint32) Muxer {
 	if metaData == nil {
 		metaData = &AMF0Object{}
 	}
@@ -238,6 +248,7 @@ func NewMuxer(metaData *AMF0Object) Muxer {
 	m := &muxer{
 		soundSize: 1,
 		metaData:  metaData,
+		preSize:   prevTagSize,
 	}
 
 	if metaData.FindProperty("creationtime") == nil {
