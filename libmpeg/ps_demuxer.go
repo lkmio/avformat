@@ -41,12 +41,12 @@ func (d *PSDeMuxer) SetHandler(handler esHandler) {
 }
 
 // 读取并解析非pes头
-// @Return int /-1-需要更多数/0-读取到pes头
-func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) (int, error) {
+// @Return int 0-读取到pes头/-1-需要更多数据
+func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) int {
 	for {
 		startCode := libavc.FindStartCodeWithReader(reader)
 		if startCode < 0 {
-			return -1, nil
+			return -1
 		}
 
 		// 将读取位置回退4个字节，因为起始码占用了4个字节
@@ -67,11 +67,11 @@ func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) (int, error) {
 			if err != nil {
 				//需要更多数据
 				_ = reader.SeekBack(4)
-				return -1, nil
+				return -1
 			} else if reader.Seek(int(skipCount)) != nil {
 				//需要更多数据
 				_ = reader.SeekBack(6)
-				return -1, nil
+				return -1
 			}
 		} else if !((startCode >= 0xc0 && startCode <= 0xdf) || (startCode >= 0xe0 && startCode <= 0xef)) {
 			//查找下一个有效数据
@@ -84,14 +84,14 @@ func (d *PSDeMuxer) readHeader(reader libbufio.BytesReader) (int, error) {
 		if startCode < 0xBD {
 			if n < 1 {
 				//需要更多数据
-				return -1, nil
+				return -1
 			}
 
 			_ = reader.Seek(n)
 		}
 	}
 
-	return 0, nil
+	return 0
 }
 
 func (d *PSDeMuxer) callbackES(data []byte) error {
@@ -154,17 +154,16 @@ func (d *PSDeMuxer) Input(data []byte) (int, error) {
 			continue
 		}
 
-		n, err := d.readHeader(d.reader)
-		if err != nil {
-			return d.reader.Offset(), err
-		} else if n < 0 || len(d.programStreamMap.elementaryStreams) < 1 {
+		n := d.readHeader(d.reader)
+		if len(d.programStreamMap.elementaryStreams) < 1 {
+			fmt.Printf("skipped %d invalid data bytes\r\n", len(data))
+			return len(data), nil
+		} else if n < 0 {
 			break
 		}
 
-		n, err = readPESHeader(d.pesHeader, d.reader.RemainingBytes())
-		if err != nil {
-			return d.reader.Offset(), err
-		} else if n < 1 {
+		n = readPESHeader(d.pesHeader, d.reader.RemainingBytes())
+		if n < 1 {
 			break
 		}
 

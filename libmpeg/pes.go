@@ -149,10 +149,10 @@ func (p *PESHeader) ToBytes(dst []byte) int {
 	return offset
 }
 
-func readPESHeader(p *PESHeader, src []byte) (int, error) {
+func readPESHeader(p *PESHeader, src []byte) int {
 	length := len(src)
 	if length < 9 {
-		return 0, nil
+		return 0
 	}
 
 	p.streamId = src[3]
@@ -215,7 +215,7 @@ func readPESHeader(p *PESHeader, src []byte) (int, error) {
 	offset := 9
 	if p.ptsDtsFlags>>1 == 0x1 {
 		if length < offset+5 {
-			return 0, nil
+			return 0
 		}
 		p.pts = int64(src[offset]&0xE)<<29 | (int64(src[offset+1]) << 22) | (int64(src[offset+2]&0xFE) << 14) | (int64(src[offset+3]) << 7) | int64(src[offset+4]>>1)
 		//offset += 5
@@ -223,7 +223,7 @@ func readPESHeader(p *PESHeader, src []byte) (int, error) {
 
 	if p.ptsDtsFlags&0x1 == 0x1 {
 		if length < offset+5 {
-			return 0, nil
+			return 0
 		}
 
 		p.dts = int64(src[offset]&0xE)<<29 | (int64(src[offset+1]) << 22) | (int64(src[offset+2]&0xFE) << 14) | (int64(src[offset+3]) << 7) | int64(src[offset+4]>>1)
@@ -232,7 +232,7 @@ func readPESHeader(p *PESHeader, src []byte) (int, error) {
 
 	if p.escrFlag == 0x1 {
 		if length < offset+6 {
-			return 0, nil
+			return 0
 		}
 
 		p.escrBase = (uint64(src[offset]&0x38) << 27) | (uint64(src[offset]&0x3) << 28) | (uint64(src[offset+1]) << 20) | (uint64(src[offset+2]&0xF8) << 12) | (uint64(src[offset+2]&0x3) << 13) | (uint64(src[offset+3]) << 5) | (uint64(src[offset+4] >> 3))
@@ -242,12 +242,12 @@ func readPESHeader(p *PESHeader, src []byte) (int, error) {
 
 	if p.esRateFlag == 0x1 {
 		if length < offset+3 {
-			return 0, nil
+			return 0
 		}
 
 		p.esRate = (uint32(src[offset]&0x7F) << 15) | (uint32(src[offset+1]) << 7) | uint32(src[offset+2]>>1)
 		//offset += 3
 	}
 
-	return offset + int(p.pesHeaderDataLength), nil
+	return offset + int(p.pesHeaderDataLength)
 }
