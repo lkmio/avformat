@@ -130,12 +130,7 @@ func (d *PSDeMuxer) SetParams(params interface{}) {
 	d.params = params
 }
 
-// 针对视频解析的优化, 如果是pes包的第一个回调, 数据长度小于5不回调. 方便根据nalu解析帧类型
-func (d *PSDeMuxer) needMore(size int) bool {
-	return size < 6 && d.esCount == 0
-}
-
-// Input 确保输入流的连续性, 比如一个视频帧有多个PES包, 多个PES包必须是连续的, 不允许插入非当前帧PES包, 否则解析出来的帧解码时会有问题.
+// Input 确保输入流的连续性, 比如一个视频帧有多个PES包, 多个PES包必须是连续的, 不允许插入非当前帧PES包.
 func (d *PSDeMuxer) Input(data []byte) (int, error) {
 	d.reader.Reset(data)
 
@@ -143,9 +138,6 @@ func (d *PSDeMuxer) Input(data []byte) (int, error) {
 		need := d.pesHeader.esLength - d.esCount
 		if need > 0 {
 			consume := libbufio.MinInt(int(need), d.reader.ReadableBytes())
-			if d.needMore(consume) {
-				break
-			}
 
 			bytes, _ := d.reader.ReadBytes(consume)
 			if err := d.callbackES(bytes); err != nil {
