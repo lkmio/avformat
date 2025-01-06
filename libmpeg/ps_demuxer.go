@@ -8,7 +8,7 @@ import (
 )
 
 type esHandler func(data []byte, total int, first bool, mediaType utils.AVMediaType, id utils.AVCodecID,
-	dts int64, pts int64, params interface{}) error
+	dts int64, pts int64) error
 
 // PSDeMuxer PS流解复用器
 type PSDeMuxer struct {
@@ -21,19 +21,14 @@ type PSDeMuxer struct {
 	pesHeader        *PESHeader
 	reader           libbufio.BytesReader
 
-	//已经读取到的ES流数量
-	esCount   uint16
+	esCount   uint16 // 已经读取到的ES流数量
 	codecId   utils.AVCodecID
 	mediaType utils.AVMediaType
-
-	//外部参数,回调es数据时携带
-	params interface{}
 }
 
 func (d *PSDeMuxer) Close() {
-	//回调最后一帧
+	// 回调最后一帧
 	d.handler = nil
-	d.params = nil
 }
 
 func (d *PSDeMuxer) SetHandler(handler esHandler) {
@@ -117,17 +112,13 @@ func (d *PSDeMuxer) callbackES(data []byte) error {
 		dts = pts
 	}
 
-	err := d.handler(data, int(d.pesHeader.esLength), d.esCount == uint16(len(data)), d.mediaType, d.codecId, dts, pts, d.params)
+	err := d.handler(data, int(d.pesHeader.esLength), d.esCount == uint16(len(data)), d.mediaType, d.codecId, dts, pts)
 	if completed {
 		d.esCount = 0
 		d.pesHeader.esLength = 0
 	}
 
 	return err
-}
-
-func (d *PSDeMuxer) SetParams(params interface{}) {
-	d.params = params
 }
 
 // Input 确保输入流的连续性, 比如一个视频帧有多个PES包, 多个PES包必须是连续的, 不允许插入非当前帧PES包.
@@ -141,7 +132,7 @@ func (d *PSDeMuxer) Input(data []byte) (int, error) {
 
 			bytes, _ := d.reader.ReadBytes(consume)
 			if err := d.callbackES(bytes); err != nil {
-				return d.reader.ReadableBytes(), err
+				return d.reader.Offset(), err
 			}
 			continue
 		}

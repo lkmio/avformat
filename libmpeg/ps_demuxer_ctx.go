@@ -12,8 +12,8 @@ type PSDeMuxerContext struct {
 	probeBuffer *PSProbeBuffer
 	handler     Handler
 
-	esCount     int //本次累计解析es长度
-	esTotalSize int //es总大小
+	esCount     int // 本次累计的es长度
+	esTotalSize int // es总大小
 	idrFrame    bool
 
 	pts       int64
@@ -32,80 +32,84 @@ type Handler interface {
 	OnCompletePacket(streamIndex int, mediaType utils.AVMediaType, codec utils.AVCodecID, dts int64, pts int64, key bool) error
 }
 
-func (source *PSDeMuxerContext) Input(data []byte) error {
-	return source.probeBuffer.Input(data)
+func (ctx *PSDeMuxerContext) Input(data []byte) error {
+	return ctx.probeBuffer.Input(data)
 }
 
-func (source *PSDeMuxerContext) SetHandler(handler Handler) {
-	source.handler = handler
+func (ctx *PSDeMuxerContext) SetHandler(handler Handler) {
+	ctx.handler = handler
 }
 
-func (source *PSDeMuxerContext) TrackCount() int {
-	return len(source.probeBuffer.deMuxer.programStreamMap.elementaryStreams)
+func (ctx *PSDeMuxerContext) TrackCount() int {
+	return len(ctx.probeBuffer.deMuxer.programStreamMap.elementaryStreams)
 }
 
-func (source *PSDeMuxerContext) findStreamIndex(mediaType utils.AVMediaType) int {
+func (ctx *PSDeMuxerContext) findStreamIndex(mediaType utils.AVMediaType) int {
 	streamIndex := -1
 
-	for i, v := range source.streamIndexes {
+	for i, v := range ctx.streamIndexes {
 		if v == mediaType {
 			streamIndex = i
 		}
 	}
 
 	if streamIndex == -1 {
-		source.streamIndexes = append(source.streamIndexes, mediaType)
-		streamIndex = len(source.streamIndexes) - 1
+		ctx.streamIndexes = append(ctx.streamIndexes, mediaType)
+		streamIndex = len(ctx.streamIndexes) - 1
 	}
 
 	return streamIndex
 }
 
-// onEsPacket 从ps流中解析出来的es流回调
-func (source *PSDeMuxerContext) onEsPacket(data []byte, total int, first bool, mediaType utils.AVMediaType, id utils.AVCodecID, dts int64, pts int64, params interface{}) error {
-	length := len(data)
+var count int
 
-	//首包,根据pts和dts的变化, 组合完整的一帧
-	if first && source.esCount > 0 && ((dts > source.dts || pts > source.pts) || source.mediaType != mediaType) {
-		//丢包造成数据不足, 释放之前的缓存数据, 丢弃帧
-		if source.esCount < source.esTotalSize {
-			source.handler.OnLossPacket(source.findStreamIndex(source.mediaType), source.mediaType, source.codecId)
+// onEsPacket 从ps流中解析出来的es流回调
+func (ctx *PSDeMuxerContext) onEsPacket(data []byte, total int, first bool, mediaType utils.AVMediaType, id utils.AVCodecID, dts int64, pts int64) error {
+	length := len(data)
+	count++
+	// 首包, 处理前一个es包. 根据时间戳和类型的变化, 决定丢弃或者回调完整包
+	if first && ctx.esCount > 0 && ((dts > ctx.dts || pts > ctx.pts) || ctx.mediaType != mediaType) {
+		tmp := ctx.esCount
+		ctx.esCount = 0
+		// 丢包造成数据不足, 释放之前的缓存数据, 丢弃帧
+		if tmp < ctx.esTotalSize {
+			ctx.handler.OnLossPacket(ctx.findStreamIndex(ctx.mediaType), ctx.mediaType, ctx.codecId)
 		} else {
-			if err := source.handler.OnCompletePacket(source.findStreamIndex(source.mediaType), source.mediaType, source.codecId, source.dts, source.pts, source.idrFrame); err != nil {
+			if err := ctx.handler.OnCompletePacket(ctx.findStreamIndex(ctx.mediaType), ctx.mediaType, ctx.codecId, ctx.dts, ctx.pts, ctx.idrFrame); err != nil {
 				return err
 			}
 		}
-
-		source.esCount = 0
 	}
 
-	if source.esCount == 0 {
-		source.mediaType = mediaType
-		source.codecId = id
-		source.esTotalSize = total
-		source.dts = dts
-		source.pts = pts
-		source.idrFrame = false
+	// 第一包, 重置标记
+	if ctx.esCount == 0 {
+		ctx.mediaType = mediaType
+		ctx.codecId = id
+		ctx.esTotalSize = total
+		ctx.dts = dts
+		ctx.pts = pts
+		ctx.idrFrame = false
 	}
 
-	source.handler.OnPartPacket(source.findStreamIndex(mediaType), mediaType, id, data, source.esCount == 0)
-	source.esCount += length
+	// 回调部分es数据
+	ctx.handler.OnPartPacket(ctx.findStreamIndex(mediaType), mediaType, id, data, ctx.esCount == 0)
+	ctx.esCount += length
 
-	//判断是否是关键帧, 不用等结束时循环判断.
-	if first && utils.AVMediaTypeVideo == mediaType && !source.idrFrame {
+	// 判断是否是关键帧, 不用等结束时循环判断.
+	if first && utils.AVMediaTypeVideo == mediaType && !ctx.idrFrame {
 		if utils.AVCodecIdH264 == id {
-			source.idrFrame = libavc.IsKeyFrame(data)
+			ctx.idrFrame = libavc.IsKeyFrame(data)
 		} else if utils.AVCodecIdH265 == id {
-			source.idrFrame = libhevc.IsKeyFrame(data)
+			ctx.idrFrame = libhevc.IsKeyFrame(data)
 		}
 	}
 
 	return nil
 }
 
-func (source *PSDeMuxerContext) Close() {
-	source.handler = nil
-	source.probeBuffer.deMuxer.Close()
+func (ctx *PSDeMuxerContext) Close() {
+	ctx.handler = nil
+	ctx.probeBuffer.deMuxer.Close()
 }
 
 func NewPSDeMuxerContext(probeBuffer []byte) *PSDeMuxerContext {

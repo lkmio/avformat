@@ -9,30 +9,32 @@ type PSProbeBuffer struct {
 	cap     int
 }
 
-func (p PSProbeBuffer) Input(data []byte) error {
+func (p *PSProbeBuffer) Input(data []byte) error {
 	length := len(data)
-	if p.offset+length > p.cap {
-		return fmt.Errorf("PS流解析缓冲区已满")
-	}
+	size := p.offset + length
 
-	var n int
-	var err error
-	if p.offset == 0 {
-		if n, err = p.deMuxer.Input(data); n > -1 {
-			copy(p.buffer[:], data[n:])
-			p.offset = length - n
-		}
-	} else {
+	var tmp = data
+	if size > p.cap {
+		return fmt.Errorf("probe buffer overflow: current length %d exceeds capacity %d", size, p.cap)
+	} else if size != length {
+		// 拷贝到缓冲区尾部
 		copy(p.buffer[p.offset:], data)
-		p.offset += length
+		tmp = p.buffer[:size]
+	}
 
-		if n, err = p.deMuxer.Input(p.buffer[:p.offset]); n > -1 {
-			copy(p.buffer[:], p.buffer[n:p.offset])
-			p.offset -= n
+	p.offset = size
+	n, err := p.deMuxer.Input(tmp)
+	if err != nil {
+		return err
+	} else if n > -1 {
+		p.offset = size - n
+		// 拷贝未解析完的剩余数据到缓冲区头部
+		if p.offset > 0 {
+			copy(p.buffer, tmp[n:])
 		}
 	}
 
-	return err
+	return nil
 }
 
 func NewProbeBuffer(deMuxer *PSDeMuxer, buffer []byte) *PSProbeBuffer {
