@@ -44,7 +44,7 @@ func NewTSMuxer() TSMuxer {
 type tsTrack struct {
 	streamType       int
 	pes              *PESHeader
-	buffer           []byte
+	buffer           []byte // 临时保存pes头
 	tsHeader         *TSHeader
 	mediaType        utils.AVMediaType
 	codecId          utils.AVCodecID
@@ -137,78 +137,88 @@ func (t *tsMuxer) write(track *tsTrack, pts, dts int64, data ...[]byte) error {
 	track.pes.dts = dts
 	track.pes.pts = pts
 
-	//给音视频帧加上pes头, 再分割成多个TS包
+	// 每帧加一个pes头, 再分割成多个TS包
 	pesHeaderLen := track.pes.ToBytes(track.buffer)
-	pesLen := size + pesHeaderLen
+	// pes头+aud
+	headerSize := pesHeaderLen
+	// 视频帧还需要加上aud头的长度
+	if utils.AVMediaTypeVideo == track.mediaType {
+		aud := [7]byte{}
+		if n := writeAud(aud[:], track.codecId); n > 0 {
+			headerSize += n
+		}
+	}
 
-	for remain := pesLen; remain > 0; {
+	for remain := size; remain > 0; {
 		bytes := t.allocHandler(TsPacketSize)
-		pktSize := TsPacketSize - 4
+		// -4预留ts包头
+		tsPktSize := TsPacketSize - 4
 
-		//首包加入pcr
-		if remain == pesLen {
+		// 首包加入pcr
+		if remain == size {
 			if utils.AVMediaTypeVideo == track.mediaType && t.startTS == pts {
-				pktSize -= track.tsHeader.writePCR(bytes[4:], pts*300)
+				tsPktSize -= track.tsHeader.writePCR(bytes[4:], pts*300)
 			}
 			track.tsHeader.payloadUnitStartIndicator = 1
 		} else {
 			track.tsHeader.payloadUnitStartIndicator = 0
 		}
 
-		//不足一个包, 填充满188个字节
-		fillCount := pktSize - remain
+		// 不足188个字节, 填充0xFF
+		fillCount := tsPktSize - headerSize - remain
 		if fillCount > 0 {
-			pktSize -= track.tsHeader.fill(bytes[TsPacketSize-pktSize:], fillCount)
+			tsPktSize -= track.tsHeader.fill(bytes[TsPacketSize-tsPktSize:], fillCount)
 		}
 
-		//拷贝pes头
+		// 拷贝pes头
 		if pesHeaderLen > 0 {
-			utils.Assert(pktSize > pesHeaderLen)
-			packetLength := pesLen - 6
-			pesStartIndex := TsPacketSize - pktSize + 4
-
-			copy(bytes[TsPacketSize-pktSize:], track.buffer[:pesHeaderLen])
-
-			pktSize -= pesHeaderLen
-			remain -= pesHeaderLen
-			pesLen = remain
+			utils.Assert(tsPktSize > pesHeaderLen)
+			lengthOffset := TsPacketSize - tsPktSize + 4
+			copy(bytes[TsPacketSize-tsPktSize:], track.buffer[:pesHeaderLen])
+			tsPktSize -= pesHeaderLen
 			pesHeaderLen = 0
 
-			//ios平台/vlc播放需要添加aud
-			//传入的nalu不要携带aud
+			// ios平台/vlc播放需要添加aud
+			// 传入的nalu不要携带aud
 			if utils.AVMediaTypeVideo == track.mediaType {
-				utils.Assert(pktSize > 6)
-				audLength := writeAud(bytes[TsPacketSize-pktSize:], track.codecId)
-				packetLength += audLength
-				pktSize -= audLength
+				utils.Assert(tsPktSize > 6)
+				tsPktSize -= writeAud(bytes[TsPacketSize-tsPktSize:], track.codecId)
 			}
 
-			if packetLength <= 65535 {
-				bytes[pesStartIndex] = byte(packetLength >> 8 & 0xFF)
-				bytes[pesStartIndex+1] = byte(packetLength & 0xFF)
+			// 写pes包长度, 如果超过2字节, 设置为0(不定长)
+			// 减去0x000001E0+长度(2bytes)
+			pesPktLength := pesHeaderLen - 6 + headerSize + size
+			if pesPktLength <= 65535 {
+				bytes[lengthOffset] = byte(pesPktLength >> 8 & 0xFF)
+				bytes[lengthOffset+1] = byte(pesPktLength & 0xFF)
 			} else {
-				bytes[pesStartIndex] = 0x00
-				bytes[pesStartIndex+1] = 0x00
+				bytes[lengthOffset] = 0x00
+				bytes[lengthOffset+1] = 0x00
 			}
+
+			headerSize = 0
 		}
 
-		index := pesLen - remain
+		// 拷贝es数据
+		index := size - remain
 		for _, pkt := range data {
-			if pktSize == 0 {
+			if tsPktSize == 0 {
 				break
 			}
 
 			if index < len(pkt) {
 				remainCount := len(pkt[index:])
-				minInt := libbufio.MinInt(remainCount, pktSize)
-				copy(bytes[TsPacketSize-pktSize:], pkt[index:index+minInt])
-				remain -= minInt
-				pktSize -= minInt
+				n := libbufio.MinInt(remainCount, tsPktSize)
+				copy(bytes[TsPacketSize-tsPktSize:], pkt[index:index+n])
+				remain -= n
+				tsPktSize -= n
 			} else {
 				index -= len(pkt)
 			}
 		}
 
+		// 完整ts包
+		utils.Assert(tsPktSize == 0)
 		track.tsHeader.toBytes(bytes[:])
 		t.writeHandler(bytes[:TsPacketSize])
 		track.tsHeader.increaseCounter()
