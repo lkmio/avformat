@@ -333,11 +333,13 @@ func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, error) {
 		header := noStartCodeNALU[0] & 0x1F
 
 		if byte(H264NalSPS) == header {
-			sps = make([]byte, len(noStartCodeNALU))
-			copy(sps, noStartCodeNALU)
+			sps = make([]byte, 4+len(noStartCodeNALU))
+			binary.BigEndian.PutUint32(sps, 0x1)
+			copy(sps[4:], noStartCodeNALU)
 		} else if byte(H264NalPPS) == header {
-			pps = make([]byte, len(noStartCodeNALU))
-			copy(pps, noStartCodeNALU)
+			pps = make([]byte, 4+len(noStartCodeNALU))
+			binary.BigEndian.PutUint32(pps, 0x1)
+			copy(pps[4:], noStartCodeNALU)
 		}
 	})
 

@@ -1,6 +1,7 @@
 package libhevc
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/lkmio/avformat/libavc"
 )
@@ -96,19 +97,22 @@ func ParseExtraDataFromKeyNALU(data []byte) ([]byte, []byte, []byte, error) {
 		header := HEVCNALUnitType(noStartCodeNALU[0] >> 1 & 0x3F)
 
 		if header == HevcNalVPS {
-			vps = make([]byte, len(noStartCodeNALU))
-			copy(vps, noStartCodeNALU)
+			vps = make([]byte, 4+len(noStartCodeNALU))
+			binary.BigEndian.PutUint32(vps, 0x1)
+			copy(vps[4:], noStartCodeNALU)
 		} else if header == HevcNalSPS {
-			sps = make([]byte, len(noStartCodeNALU))
-			copy(sps, noStartCodeNALU)
+			sps = make([]byte, 4+len(noStartCodeNALU))
+			binary.BigEndian.PutUint32(sps, 0x1)
+			copy(sps[4:], noStartCodeNALU)
 		} else if header == HevcNalPPS {
-			pps = make([]byte, len(noStartCodeNALU))
-			copy(pps, noStartCodeNALU)
+			pps = make([]byte, 4+len(noStartCodeNALU))
+			binary.BigEndian.PutUint32(pps, 0x1)
+			copy(pps[4:], noStartCodeNALU)
 		}
 	})
 
 	if vps == nil || sps == nil || pps == nil {
-		return nil, nil, nil, fmt.Errorf("not find extra data for H264")
+		return nil, nil, nil, fmt.Errorf("not find extra data for H265")
 	}
 	return vps, sps, pps, nil
 }

@@ -35,7 +35,7 @@ type AVCDecoderConfigurationRecord struct {
 	AVCLevelIndication   byte
 	LengthSizeMinusOne   byte
 
-	SPSList [][]byte //解析后会携带start code
+	SPSList [][]byte // AnnexB格式
 	PPSList [][]byte
 }
 
@@ -126,7 +126,7 @@ func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 			return err
 		}
 
-		//添加start code
+		// 添加start code
 		sps := make([]byte, len(bytes)+4)
 		binary.BigEndian.PutUint32(sps, 0x1)
 		copy(sps[4:], bytes)
@@ -153,7 +153,7 @@ func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 			return err
 		}
 
-		//添加start code
+		// 添加start code
 		pps := make([]byte, len(bytes)+4)
 		binary.BigEndian.PutUint32(pps, 0x1)
 		copy(pps[4:], bytes)
@@ -169,6 +169,7 @@ func (a *AVCDecoderConfigurationRecord) Unmarshal(data []byte) error {
 	return nil
 }
 
+// ExtraDataToAnnexB AVCDecoderConfigurationRecord转AnnexB
 func ExtraDataToAnnexB(data []byte) ([]byte, error) {
 	record := AVCDecoderConfigurationRecord{}
 	if err := record.Unmarshal(data); err != nil {
