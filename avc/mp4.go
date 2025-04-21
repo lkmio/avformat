@@ -85,9 +85,9 @@ func (a *AVCDecoderConfigurationRecord) Marshal(spsList, ppsList [][]byte) ([]by
 	}
 
 	bytes[0] = 1
-	bytes[1] = noStartCodeSps[3]
-	bytes[2] = noStartCodeSps[4]
-	bytes[3] = noStartCodeSps[5]
+	bytes[1] = noStartCodeSps[1]
+	bytes[2] = noStartCodeSps[2]
+	bytes[3] = noStartCodeSps[3]
 	bytes[4] = 0xff
 	bytes[5] = 0xE0 | byte(len(spsList))
 	return bytes[:writer.Offset()], nil
