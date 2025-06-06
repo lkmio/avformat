@@ -83,7 +83,9 @@ func (s *BaseDemuxer) OnNewAudioTrack(bufferIndex int, id utils.AVCodecID, timeb
 	}
 
 	// 编码器信息会拷贝一份, 所以这里可以释放掉
-	s.DataPipeline.DiscardBackPacket(bufferIndex)
+	if len(extraData) > 0 {
+		s.DataPipeline.DiscardBackPacket(bufferIndex)
+	}
 	return track
 }
 
@@ -135,7 +137,9 @@ func (s *BaseDemuxer) OnNewVideoTrack(bufferIndex int, id utils.AVCodecID, timeb
 		track = s.createVideoTrack(bufferIndex, id, timebase, extraData)
 	}
 
-	s.DataPipeline.DiscardBackPacket(bufferIndex)
+	if len(extraData) > 0 {
+		s.DataPipeline.DiscardBackPacket(bufferIndex)
+	}
 	return track
 }
 
