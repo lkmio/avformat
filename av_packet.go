@@ -39,9 +39,10 @@ type AVPacket struct {
 	MediaType utils.AVMediaType // 冗余媒体类型
 	CodecID   utils.AVCodecID   // 冗余编码器ID
 
-	PacketType PacketType // 视频打包模式
-	dataAVCC   []byte
-	dataAnnexB []byte
+	PacketType    PacketType // 视频打包模式
+	dataAVCC      []byte
+	dataAnnexB    []byte
+	OnBufferAlloc func(size int) []byte
 }
 
 func (pkt *AVPacket) ConvertDts(dstTimebase int) int64 {

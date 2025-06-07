@@ -18,7 +18,14 @@ func AVCCPacket2AnnexB(stream *AVStream, pkt *AVPacket) []byte {
 		return pkt.Data
 	} else if pkt.dataAnnexB == nil {
 		var n int
-		bytes := make([]byte, len(pkt.Data)+256)
+		var bytes []byte
+		dstSize := len(pkt.Data) + 256
+		if pkt.OnBufferAlloc != nil {
+			bytes = pkt.OnBufferAlloc(dstSize)
+		} else {
+			bytes = make([]byte, dstSize)
+		}
+
 		if utils.AVCodecIdH264 == pkt.CodecID {
 			n = avc.AVCC2AnnexB(bytes, pkt.Data, nil)
 		} else if utils.AVCodecIdH265 == pkt.CodecID {
@@ -43,7 +50,14 @@ func AnnexBPacket2AVCC(pkt *AVPacket) []byte {
 	if PacketTypeAnnexB != pkt.PacketType || (pkt.CodecID != utils.AVCodecIdH264 && pkt.CodecID != utils.AVCodecIdH265) {
 		return pkt.Data
 	} else if pkt.dataAVCC == nil {
-		bytes := make([]byte, len(pkt.Data)+256)
+		var bytes []byte
+		dstSize := len(pkt.Data) + 256
+		if pkt.OnBufferAlloc != nil {
+			bytes = pkt.OnBufferAlloc(dstSize)
+		} else {
+			bytes = make([]byte, dstSize)
+		}
+
 		n := avc.AnnexB2AVCC(bytes, pkt.Data)
 		pkt.dataAVCC = bytes[:n]
 	}
