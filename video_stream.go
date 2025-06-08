@@ -170,15 +170,6 @@ func ExtractAudioPacket(codec utils.AVCodecID, data []byte, ts int64, index, tim
 		//	}
 		//}
 
-		packet = &AVPacket{
-			Data:     data[skip:],
-			Dts:      ts,
-			Pts:      ts,
-			CodecID:  codec,
-			Index:    index,
-			Timebase: timebase,
-		}
-
 		packet = NewAudioPacket(data[skip:], ts, codec, index, timebase)
 	} else /*if utils.AVCodecIdPCMALAW == codec || utils.AVCodecIdPCMMULAW == codec*/ {
 

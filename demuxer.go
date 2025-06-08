@@ -296,6 +296,7 @@ func (s *BaseDemuxer) forwardPacket(packet *AVPacket) {
 		bufferIndex, ok := s.streamIndex2BufferIndex[packet.Index]
 		utils.Assert(ok)
 		s.DataPipeline.DiscardHeadPacket(bufferIndex)
+		FreePacket(packet)
 	}
 }
 

@@ -2,6 +2,7 @@ package avformat
 
 import (
 	"github.com/lkmio/avformat/utils"
+	"sync"
 )
 
 type PacketType byte
@@ -23,6 +24,14 @@ const (
 	PacketTypeAVCC   = PacketType(2)
 	PacketTypeNONE   = PacketType(3)
 	DTSUndefined     = DTS(-1)
+)
+
+var (
+	PacketPool = sync.Pool{
+		New: func() any {
+			return &AVPacket{}
+		},
+	}
 )
 
 type AVPacket struct {
@@ -62,31 +71,48 @@ func (pkt *AVPacket) GetDuration(timebase int) int64 {
 }
 
 func NewAudioPacket(data []byte, ts int64, id utils.AVCodecID, index, timebase int) *AVPacket {
-	packet := &AVPacket{
-		Data:      data,
-		Dts:       ts,
-		Pts:       ts,
-		CodecID:   id,
-		Index:     index,
-		Timebase:  timebase,
-		MediaType: utils.AVMediaTypeAudio,
-	}
+	packet := PacketPool.Get().(*AVPacket)
+	packet.Data = data
+	packet.Dts = ts
+	packet.Pts = ts
+	packet.CodecID = id
+	packet.Index = index
+	packet.Timebase = timebase
+	packet.MediaType = utils.AVMediaTypeAudio
 
 	return packet
 }
 
 func NewVideoPacket(data []byte, dts, pts int64, key bool, pktType PacketType, id utils.AVCodecID, index, timebase int) *AVPacket {
-	packet := &AVPacket{
-		Data:       data,
-		Dts:        dts,
-		Pts:        pts,
-		Key:        key,
-		PacketType: pktType,
-		CodecID:    id,
-		Index:      index,
-		Timebase:   timebase,
-		MediaType:  utils.AVMediaTypeVideo,
-	}
+	packet := PacketPool.Get().(*AVPacket)
+	packet.Data = data
+	packet.Dts = dts
+	packet.Pts = pts
+	packet.Key = key
+	packet.PacketType = pktType
+	packet.CodecID = id
+	packet.Index = index
+	packet.Timebase = timebase
+	packet.MediaType = utils.AVMediaTypeVideo
 
 	return packet
+}
+
+func FreePacket(packet *AVPacket) {
+	packet.Data = nil
+	packet.dataAVCC = nil
+	packet.dataAnnexB = nil
+	packet.OnBufferAlloc = nil
+	packet.BufferIndex = 0
+	packet.Dts = 0
+	packet.Pts = 0
+	packet.Duration = 0
+	packet.Key = false
+	packet.CreatedTime = 0
+	packet.Index = 0
+	packet.Timebase = 0
+	packet.PacketType = PacketTypeNONE
+	packet.MediaType = utils.AVMediaTypeUnknown
+	packet.CodecID = utils.AVCodecIdNONE
+	PacketPool.Put(packet)
 }
