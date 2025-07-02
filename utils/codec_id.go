@@ -551,13 +551,15 @@ func (a AVCodecID) String() string {
 	case AVCodecIdAAC:
 		return "AAC"
 	case AVCodecIdPCMALAW:
-		return "G711A"
+		return "PCMA"
 	case AVCodecIdPCMMULAW:
-		return "G711U"
+		return "PCMU"
 	case AVCodecIdOPUS:
 		return "OPUS"
 	case AVCodecIdMP3:
 		return "MP3"
+	case AVCodecIdADPCMG722:
+		return "G722"
 	default:
 
 		return strconv.Itoa(int(a))
