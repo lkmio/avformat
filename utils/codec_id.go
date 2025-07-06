@@ -560,6 +560,10 @@ func (a AVCodecID) String() string {
 		return "MP3"
 	case AVCodecIdADPCMG722:
 		return "G722"
+	case AVCodecIdADPCMG726:
+		return "G726"
+	case AVCodecIdPCMS16LE:
+		return "PCMS16LE"
 	default:
 
 		return strconv.Itoa(int(a))

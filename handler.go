@@ -27,7 +27,11 @@ type OnUnpackStreamLogger struct {
 func (o *OnUnpackStreamLogger) OnNewTrack(track Track) {
 	utils.Assert(o.tracks.Add(track))
 
-	fmt.Printf("tack type: %s codec: %s index: %d\r\n", track.GetStream().MediaType.String(), track.GetStream().CodecID.String(), track.GetStream().Index)
+	if utils.AVMediaTypeAudio == track.GetStream().MediaType {
+		fmt.Printf("tack type: %s codec: %s index: %d sample_rate: %d channels: %d\r\n", track.GetStream().MediaType.String(), track.GetStream().CodecID.String(), track.GetStream().Index, track.GetStream().SampleRate, track.GetStream().Channels)
+	} else {
+		fmt.Printf("tack type: %s codec: %s index: %d\r\n", track.GetStream().MediaType.String(), track.GetStream().CodecID.String(), track.GetStream().Index)
+	}
 }
 
 func (o *OnUnpackStreamLogger) OnTrackComplete() {

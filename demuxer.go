@@ -381,6 +381,7 @@ func (s *BaseDemuxer) SetOnPreprocessPacketHandler(onPreprocessPacket func(packe
 
 func (s *BaseDemuxer) Close() {
 	s.Handler = nil
+	s.onPreprocessPacket = nil
 }
 
 func (s *BaseDemuxer) SetProbeDuration(duration int) {
