@@ -333,6 +333,104 @@ func (s *BaseDemuxer) findTrackByBufferIndex(index int) Track {
 	return nil
 }
 
+// calculatePCMFrequency 计算pcm采样率
+func (s *BaseDemuxer) calculatePCMFrequency() bool {
+	var pktDuration int
+	var pktDataSize int
+	for _, pkts := range s.Packets {
+		if pkts.Size() < 1 {
+			continue
+		}
+
+		pkt := pkts.Get(0)
+		if pkt.CodecID != utils.AVCodecIdPCMS16LE {
+			continue
+		}
+
+		pktDuration = int(pkt.GetDuration(1000))
+		pktDataSize = len(pkt.Data)
+		break
+	}
+
+	if pktDuration < 1 {
+		return false
+	}
+
+	for _, track := range s.Tracks.Tracks {
+		if track.GetStream().CodecID != utils.AVCodecIdPCMS16LE {
+			continue
+		}
+
+		var sampleRate = track.GetStream().SampleSize
+		msSize := pktDataSize / pktDuration
+		if msSize <= 16 { // 8K
+			sampleRate = 8000
+		} else if msSize <= 32 { // 16K
+			sampleRate = 16000
+		} else if msSize <= 64 { // 32K
+			sampleRate = 32000
+		} else if msSize <= 96 { // 48K
+			sampleRate = 48000
+		}
+
+		track.GetStream().SampleRate = sampleRate
+	}
+
+	return true
+}
+
+// calculateG726BitRate 计算g726比特率
+func (s *BaseDemuxer) calculateG726BitRate() bool {
+	var pktDuration int
+	var pktDataSize int
+	for _, pkts := range s.Packets {
+		if pkts.Size() < 1 {
+			continue
+		}
+
+		pkt := pkts.Get(0)
+		if pkt.CodecID != utils.AVCodecIdADPCMG726 {
+			continue
+		}
+
+		pktDuration = int(pkt.GetDuration(1000))
+		pktDataSize = len(pkt.Data)
+		break
+	}
+
+	if pktDuration < 1 {
+		return false
+	}
+
+	bitRate := pktDataSize / pktDuration * 1000 * 8
+	if bitRate <= 16000 {
+		bitRate = 16000
+	} else if bitRate <= 24000 {
+		bitRate = 24000
+	} else if bitRate <= 32000 {
+		bitRate = 32000
+	} else if bitRate <= 40000 {
+		bitRate = 40000
+	} else {
+		return false
+	}
+
+	for _, track := range s.Tracks.Tracks {
+		if track.GetStream().CodecID != utils.AVCodecIdADPCMG726 {
+			continue
+		}
+		track.GetStream().BitRate = bitRate
+	}
+
+	return true
+}
+
+// 回调前的准备工作
+func (s *BaseDemuxer) prepareTracks() {
+	s.calculatePCMFrequency()
+	s.calculateG726BitRate()
+}
+
 func (s *BaseDemuxer) OnProbeComplete() {
 	if s.Completed {
 		return
@@ -386,6 +484,31 @@ func (s *BaseDemuxer) Close() {
 
 func (s *BaseDemuxer) SetProbeDuration(duration int) {
 	s.ProbeDuration = duration
+}
+
+// TryCompleteProbe 尝试完成探测, 如果数据不足, 则不完成探测
+func (s *BaseDemuxer) TryCompleteProbe() {
+	var needMoreData bool
+	for _, track := range s.Tracks.Tracks {
+		if track.GetStream().CodecID != utils.AVCodecIdPCMS16LE && track.GetStream().CodecID != utils.AVCodecIdADPCMG726 {
+			continue
+		}
+
+		for i, packets := range s.Packets {
+			if i == track.GetStream().Index && packets.Size() < 2 {
+				needMoreData = true
+				break
+			}
+		}
+
+		if needMoreData {
+			break
+		}
+	}
+
+	if !needMoreData {
+		s.ProbeComplete()
+	}
 }
 
 func (s *BaseDemuxer) ProbeComplete() {

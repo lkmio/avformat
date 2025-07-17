@@ -7,6 +7,7 @@ type AudioConfig struct {
 	SampleSize    int  // 音频采样位深
 	Channels      int  // 音频通道数
 	HasADTSHeader bool // 是否存在ADTSHeader
+	BitRate       int  // 音频比特率
 }
 
 type AVStream struct {
