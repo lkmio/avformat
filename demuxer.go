@@ -442,6 +442,7 @@ func (s *BaseDemuxer) OnProbeComplete() {
 		return
 	}
 
+	s.prepareTracks()
 	for _, track := range s.Tracks.Tracks {
 		s.Handler.OnNewTrack(track)
 	}
