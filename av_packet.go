@@ -55,10 +55,18 @@ type AVPacket struct {
 }
 
 func (pkt *AVPacket) ConvertDts(dstTimebase int) int64 {
+	if pkt.Timebase == dstTimebase {
+		return pkt.Dts
+	}
+
 	return ConvertTs(pkt.Dts, pkt.Timebase, dstTimebase)
 }
 
 func (pkt *AVPacket) ConvertPts(dstTimebase int) int64 {
+	if pkt.Timebase == dstTimebase {
+		return pkt.Pts
+	}
+
 	return ConvertTs(pkt.Pts, pkt.Timebase, dstTimebase)
 }
 
@@ -68,6 +76,15 @@ func (pkt *AVPacket) GetDuration(timebase int) int64 {
 	}
 
 	return ConvertTs(pkt.Duration, pkt.Timebase, timebase)
+}
+
+// GetPtsDtsDelta 计算PTS和DTS的时间差
+func (pkt *AVPacket) GetPtsDtsDelta(timebase int) int64 {
+	if pkt.Timebase == timebase {
+		return pkt.Pts - pkt.Dts
+	}
+
+	return ConvertTs(pkt.Pts-pkt.Dts, pkt.Timebase, timebase)
 }
 
 func NewAudioPacket(data []byte, ts int64, id utils.AVCodecID, index, timebase int) *AVPacket {
