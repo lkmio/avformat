@@ -15,11 +15,39 @@ func AVCCPacket2AnnexB(stream *AVStream, pkt *AVPacket) []byte {
 	utils.Assert(utils.AVMediaTypeVideo == pkt.MediaType)
 
 	if PacketTypeAVCC != pkt.PacketType || (stream.CodecID != utils.AVCodecIdH264 && stream.CodecID != utils.AVCodecIdH265) {
+		// 确保annexb的关键帧开头是vps/sps/pps
+		if pkt.Key && (stream.CodecID == utils.AVCodecIdH264 || stream.CodecID == utils.AVCodecIdH265) && stream.CodecParameters != nil && pkt.dataAnnexB == nil {
+			extraData := stream.CodecParameters.AnnexBExtraData()
+			if avc.RemoveStartCode(extraData)[0] != avc.RemoveStartCode(pkt.Data)[0] {
+				size := len(extraData) + len(pkt.Data)
+				var data []byte
+				if pkt.OnBufferAlloc != nil {
+					data = pkt.OnBufferAlloc(size)
+				} else {
+					data = make([]byte, size)
+				}
+
+				copy(data, extraData)
+				copy(data[len(extraData):], pkt.Data)
+				pkt.dataAnnexB = data
+			}
+		}
+
+		if pkt.dataAnnexB != nil {
+			return pkt.dataAnnexB
+		}
+
 		return pkt.Data
 	} else if pkt.dataAnnexB == nil {
 		var n int
 		var bytes []byte
-		dstSize := len(pkt.Data) + 256
+
+		var extraDataSize int
+		if pkt.Key && stream.CodecParameters != nil {
+			extraDataSize = len(stream.CodecParameters.AnnexBExtraData())
+		}
+
+		dstSize := extraDataSize + len(pkt.Data) + 256
 		if pkt.OnBufferAlloc != nil {
 			bytes = pkt.OnBufferAlloc(dstSize)
 		} else {
@@ -27,17 +55,19 @@ func AVCCPacket2AnnexB(stream *AVStream, pkt *AVPacket) []byte {
 		}
 
 		if utils.AVCodecIdH264 == pkt.CodecID {
-			n = avc.AVCC2AnnexB(bytes, pkt.Data, nil)
+			n = avc.AVCC2AnnexB(bytes[extraDataSize:], pkt.Data, nil)
 		} else if utils.AVCodecIdH265 == pkt.CodecID {
 			var err error
 
 			lengthSize := stream.CodecParameters.(*HEVCCodecData).Record.LengthSizeMinusOne
-			n, err = hevc.Mp4ToAnnexB(bytes, pkt.Data, nil, int(lengthSize))
+			n, err = hevc.Mp4ToAnnexB(bytes[extraDataSize:], pkt.Data, nil, int(lengthSize))
 			if err != nil {
 				panic(err)
 			}
 		}
 
+		copy(bytes[:extraDataSize], stream.CodecParameters.AnnexBExtraData())
+		n += extraDataSize
 		pkt.dataAnnexB = bytes[:n]
 	}
 
