@@ -7,8 +7,8 @@ type BlockBuffer interface {
 	// Alloc 从尾部分配指定内存长度
 	Alloc(size int) []byte
 
-	// Feat 从尾部获取一个block
-	Feat() []byte
+	// Fetch 从尾部获取一个block
+	Fetch() []byte
 
 	// Pop 从头部弹出一个block
 	Pop()

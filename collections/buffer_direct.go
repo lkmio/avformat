@@ -66,9 +66,12 @@ func (b *DirectBlockBuffer) Alloc(size int) []byte {
 	return data
 }
 
-func (b *DirectBlockBuffer) Feat() []byte {
+func (b *DirectBlockBuffer) Fetch() []byte {
 	utils.Assert(!b.sealed)
 	block := b.blocks.Tail()
+	if block.completed {
+		return nil
+	}
 	block.completed = true
 	return b.data[block.index : block.index+block.size]
 }

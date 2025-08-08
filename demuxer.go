@@ -452,6 +452,7 @@ func (s *BaseDemuxer) OnProbeComplete() {
 	// 回调之前保存的AVPacket
 	var result []*AVPacket
 	for _, packets := range s.Packets {
+		// 跳过少于2个packet的track
 		prePacketIndex := packets.Size() - 2
 		if prePacketIndex < 0 {
 			continue

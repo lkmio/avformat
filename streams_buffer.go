@@ -27,8 +27,8 @@ func (s *StreamsBuffer) Write(data []byte, index int, mediaType utils.AVMediaTyp
 	return len(data), nil
 }
 
-func (s *StreamsBuffer) Feat(index int) ([]byte, error) {
-	data := s.findOrCreateStreamBuffer(index, utils.AVMediaTypeUnknown).Feat()
+func (s *StreamsBuffer) Fetch(index int) ([]byte, error) {
+	data := s.findOrCreateStreamBuffer(index, utils.AVMediaTypeUnknown).Fetch()
 	return data, nil
 }
 

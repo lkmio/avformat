@@ -25,7 +25,7 @@ func (d *DirectDataPipeline) Write(data []byte, index int, mediaType utils.AVMed
 	return d.size, nil
 }
 
-func (d *DirectDataPipeline) Feat(index int) ([]byte, error) {
+func (d *DirectDataPipeline) Fetch(index int) ([]byte, error) {
 	bytes := d.data[:d.size]
 	d.size = 0
 	return bytes, nil
