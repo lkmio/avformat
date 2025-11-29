@@ -24,6 +24,8 @@ type Demuxer interface {
 	SetProbeDuration(duration int)
 
 	ProbeComplete()
+
+	GetTracks() TrackManager
 }
 
 type BaseDemuxer struct {
@@ -515,4 +517,8 @@ func (s *BaseDemuxer) TryCompleteProbe() {
 
 func (s *BaseDemuxer) ProbeComplete() {
 	s.OnProbeComplete()
+}
+
+func (s *BaseDemuxer) GetTracks() TrackManager {
+	return s.Tracks
 }
